@@ -1,0 +1,39 @@
+{
+  "name": "openai-agents-poc",
+  "version": "1.0.0",
+  "description": "OpenAI Agents SDK TypeScript Proof of Concept",
+  "main": "agent-poc.ts",
+  "type": "commonjs",
+  "scripts": {
+    "start": "ts-node agent-poc.ts",
+    "dev": "ts-node --watch agent-poc.ts",
+    "build": "tsc",
+    "build:run": "npm run build && node dist/agent-poc.js",
+    "clean": "rm -rf dist",
+    "test": "echo \"No tests defined yet\" && exit 0",
+    "postinstall": "playwright install chromium",
+    "install:browsers": "playwright install"
+  },
+  "keywords": [
+    "openai",
+    "agents",
+    "typescript",
+    "ai",
+    "proof-of-concept"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@openai/agents": "^0.0.1",
+    "playwright": "^1.55.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
