@@ -1,24 +1,37 @@
-import { initAgentsPoc, ChatOpenAI } from './src';
+import { initAgentsPoc, ChatOpenAI, Variable } from './src';
 
-console.log('🤖 AgentsPoc Pricing Analyzer POC - Visual Pricing Discovery');
+console.log('✈️ AgentsPoc Flight Assistant POC - Automated Flight Deal Search');
 console.log('=========================================================\n');
 
 // Initialize logger for debugging (optional)
-console.log('🔧 Initializing AgentsPoc with ChatOpenAI...\n');
+console.log('🔧 Initializing AgentsPoc Flight Assistant with ChatOpenAI...\n');
 
-// Main function to run the pricing analyzer
+// Main function to run the flight assistant
 async function main(): Promise<void> {
   try {
-    console.log('Starting AgentsPoc pricing analysis...\n');
+    console.log('Starting AgentsPoc flight search...\n');
     
     // Hard-coded input using domain-based approach
-    const domain = 'planetfitnes.com';
+    const domain = 'flights.jeffreykeyser.net';
     console.log(`📝 Target Domain: "${domain}"\n`);
     
+    // Create credentials variables (REPLACE WITH YOUR ACTUAL CREDENTIALS)
+    const username = new Variable({
+      name: 'username',
+      value: 'test@email.com', // TODO: Replace with actual username
+      isSecret: false
+    });
+    
+    const password = new Variable({
+      name: 'password',
+      value: 'password', // TODO: Replace with actual password  
+      isSecret: true
+    });
+
     // Initialize ChatOpenAI with configuration
     const llm = new ChatOpenAI({
       apiKey: process.env.OPENAI_API_KEY || '',
-      model: 'gpt-4o-mini',
+      model: 'o4-mini',
       temperature: 0.3, // Lower temperature for more consistent extraction
     });
     
@@ -26,53 +39,63 @@ async function main(): Promise<void> {
     const agentsPoc = initAgentsPoc({
       llm,
       headless: false, // Show browser for demo purposes
+      variables: [username, password]
     });
     
-    console.log('🔄 AgentsPoc is processing pricing discovery...\n');
+    console.log('🔄 AgentsPoc is logging in and searching for flights...\n');
     
-    // Execute comprehensive pricing analysis by navigating directly to domain
+    // Execute flight search with login and filtering
     const openatorResult = await agentsPoc.start(
       `https://${domain}`,
-      `Navigate to the pricing page on this website by:
-      
-      1. Looking for navigation links with text like: "Pricing", "Plans", "Price", "Subscription", "Packages", "Get Started"
-      2. Check the main navigation menu, header, footer, or prominent buttons
-      3. Click on the pricing/plans link to navigate there
-      4. If no direct pricing link is found, look for "Products" or "Solutions" that might lead to pricing
-      
-      Once you reach the pricing page, extract the first tier or standard pricing information and return it in this structured JSON format:
-      
-      -- Simplified JSON format --
+      `You are a flight assistant that helps find flight deals. Complete this task in the following steps in order:
+
+      STEP 1 - LOGIN:
+      1. Find and fill the login form on this website
+      2. Look for username/email field and enter: {{username}}
+      3. Look for password field and enter: {{password}}  
+      4. Click the login/sign-in button to authenticate
+      5. If modal is hidden, you can assume login was successful and don't have to repeat this process
+
+      STEP 2 - FILTER FOR FLIGHTS:
+      7. Click on the Filter input element to show the filters on the screen
+      8. Now only adjust the following filters:
+        - Adjust "Quick Filter" to "Next Month"
+      9. Filters should automatically apply and the page will update to show the filtered results
+
+      STEP 3 - EXTRACT FLIGHT DEALS:
+      10. Extract the top 3-5 flight deals to destinations outside of United States and return them in this JSON format:
+
+      -- Flight Deals JSON format --
       {
-        "url": "the final pricing page URL",
-        "tier": [
+        "searchCriteria": "Best flight deals to destinations outside of United States",
+        "deals": [
           {
-            "tierName": "plan name (e.g. Free, Basic, Standard, etc)",
-            "price": {
-              "summary": "price summary (e.g. $10/month, $100/year, etc)"
-            },
-            "features": ["list of key features for this tier"]
+            "origin": "Origin city/airport",
+            "destination": "Destination city/airport", 
+            "departureDate": "Departure date",
+            "returnDate": "Return date (if round-trip)",
+            "price": "Total price with currency",
+            "airline": "Airline name",
+            "duration": "Flight duration or stops",
+            "dealScore": "Any deal rating/score if available"
           }
-        ]
+        ],
+        "totalFound": "Number of deals found",
+        "url": "Final page URL where deals were found"
       }
-      
-      Fallback to just returning the important information if the json parsing fails.
 
-      Print out the json to the console.
-
-      Make sure to:
-      1. Find the official pricing page (not third-party sites)
-      2. Extract exact prices, not approximations
-      3. Include all available pricing tiers
-      4. Note which plan is highlighted/recommended if any
-      5. Capture any annual vs monthly pricing differences
-      6. Return ONLY the JSON format requested above`
+      IMPORTANT NOTES:
+      - Use the variable {{username}} and {{password}} for login credentials
+      - If login fails, describe what happened and try alternative login methods
+      - If no October flights are available, find the best available deals and note the actual timeframe
+      - Extract real data from the page, not placeholder information
+      - Return ONLY the JSON format requested above`
     );
     
-    console.log(`✅ Pricing analysis completed with status: ${openatorResult.status}!\n`);
+    console.log(`✅ Flight search completed with status: ${openatorResult.status}!\n`);
     
-    // Display the extracted pricing information
-    console.log('📊 PRICING ANALYSIS RESULTS');
+    // Display the extracted flight deals
+    console.log('✈️ FLIGHT DEALS RESULTS');
     console.log('═'.repeat(50));
     
     // Try to parse and format the result
@@ -85,18 +108,18 @@ async function main(): Promise<void> {
         console.log(JSON.stringify(parsedResult, null, 2));
       } else {
         // If not JSON, display the raw result
-        console.log('Raw extracted data:');
+        console.log('Raw flight data:');
         console.log(result);
       }
     } catch (parseError) {
-      console.log('Raw extraction result:');
+      console.log('Raw flight search result:');
       console.log(openatorResult.result);
       console.log('\n⚠️  Note: Result may need manual parsing');
     }
     
     console.log('═'.repeat(50));
-    console.log('\n🎉 AgentsPoc POC completed successfully!');
-    console.log('💡 This demonstrates browser automation with natural language instructions');
+    console.log('\n🎉 Flight Assistant POC completed successfully!');
+    console.log('💡 This demonstrates automated flight searching with login and filtering');
     
   } catch (error) {
     console.error('❌ Error running AgentsPoc:', error);
@@ -124,9 +147,9 @@ if (require.main === module) {
 
   // Wait for 60 seconds before exiting
   setTimeout(() => {
-    console.log('🔄 Waiting for 120 seconds...');
+    console.log('🔄 Waiting for 180 seconds...');
     process.exit(0);
-  }, 120000);
+  }, 180000);
 
 }
 
