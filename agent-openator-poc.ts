@@ -1,37 +1,37 @@
-import { initOpenator, ChatOpenAI } from 'openator';
+import { initAgentsPoc, ChatOpenAI } from './src';
 
-console.log('🤖 Openator Pricing Analyzer POC - Visual Pricing Discovery');
+console.log('🤖 AgentsPoc Pricing Analyzer POC - Visual Pricing Discovery');
 console.log('=========================================================\n');
 
 // Initialize logger for debugging (optional)
-console.log('🔧 Initializing Openator with ChatOpenAI...\n');
+console.log('🔧 Initializing AgentsPoc with ChatOpenAI...\n');
 
 // Main function to run the pricing analyzer
 async function main(): Promise<void> {
   try {
-    console.log('Starting Openator pricing analysis...\n');
+    console.log('Starting AgentsPoc pricing analysis...\n');
     
     // Hard-coded input using domain-based approach
-    const domain = 'stripe.com';
+    const domain = 'planetfitnes.com';
     console.log(`📝 Target Domain: "${domain}"\n`);
     
     // Initialize ChatOpenAI with configuration
     const llm = new ChatOpenAI({
       apiKey: process.env.OPENAI_API_KEY || '',
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       temperature: 0.3, // Lower temperature for more consistent extraction
     });
     
-    // Initialize Openator
-    const openator = initOpenator({
+    // Initialize AgentsPoc
+    const agentsPoc = initAgentsPoc({
       llm,
       headless: false, // Show browser for demo purposes
     });
     
-    console.log('🔄 Openator is processing pricing discovery...\n');
+    console.log('🔄 AgentsPoc is processing pricing discovery...\n');
     
     // Execute comprehensive pricing analysis by navigating directly to domain
-    const result = await openator.start(
+    const openatorResult = await agentsPoc.start(
       `https://${domain}`,
       `Navigate to the pricing page on this website by:
       
@@ -42,23 +42,18 @@ async function main(): Promise<void> {
       
       Once you reach the pricing page, extract the first tier or standard pricing information and return it in this structured JSON format:
       
+      -- Simplified JSON format --
       {
         "url": "the final pricing page URL",
-        "extractionMethod": "openator-browser-automation",
-        "timestamp": "${new Date().toISOString()}",
-        "pricingTiers": [
+        "tier": [
           {
             "tierName": "plan name (e.g. Free, Basic, Standard, etc)",
             "price": {
-              "amount": "price number only",
-              "currency": "currency symbol or code",
-              "period": "billing period (monthly/yearly/one-time)"
+              "summary": "price summary (e.g. $10/month, $100/year, etc)"
             },
-            "features": ["list of key features for this tier"],
+            "features": ["list of key features for this tier"]
           }
-        ],
-        "specialOffers": ["any discounts or special offers mentioned"],
-        "notes": "any additional observations about pricing structure"
+        ]
       }
       
       Fallback to just returning the important information if the json parsing fails.
@@ -74,7 +69,7 @@ async function main(): Promise<void> {
       6. Return ONLY the JSON format requested above`
     );
     
-    console.log('✅ Pricing analysis completed!\n');
+    console.log(`✅ Pricing analysis completed with status: ${openatorResult.status}!\n`);
     
     // Display the extracted pricing information
     console.log('📊 PRICING ANALYSIS RESULTS');
@@ -84,6 +79,7 @@ async function main(): Promise<void> {
     try {
       // Attempt to parse as JSON if it's structured data
       let parsedResult;
+      const result = openatorResult.result;
       if (typeof result === 'string' && result.trim().startsWith('{')) {
         parsedResult = JSON.parse(result);
         console.log(JSON.stringify(parsedResult, null, 2));
@@ -94,16 +90,16 @@ async function main(): Promise<void> {
       }
     } catch (parseError) {
       console.log('Raw extraction result:');
-      console.log(result);
+      console.log(openatorResult.result);
       console.log('\n⚠️  Note: Result may need manual parsing');
     }
     
     console.log('═'.repeat(50));
-    console.log('\n🎉 Openator POC completed successfully!');
+    console.log('\n🎉 AgentsPoc POC completed successfully!');
     console.log('💡 This demonstrates browser automation with natural language instructions');
     
   } catch (error) {
-    console.error('❌ Error running Openator:', error);
+    console.error('❌ Error running AgentsPoc:', error);
     
     // Provide helpful error messages for common issues
     if (error instanceof Error) {
