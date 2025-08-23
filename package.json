@@ -6,6 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "ts-node agent-poc.ts",
+    "start:openator": "ts-node agent-openator-poc.ts",
     "dev": "ts-node --watch agent-poc.ts",
     "build": "tsc",
     "build:run": "npm run build && node dist/agent-poc.js",
@@ -25,6 +26,7 @@
   "license": "MIT",
   "dependencies": {
     "@openai/agents": "^0.0.1",
+    "openator": "^1.3.2",
     "playwright": "^1.55.0",
     "zod": "^3.23.8"
   },

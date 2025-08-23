@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "Bash(npm run build:*)",
+      "Bash(npm start)",
+      "WebSearch",
+      "WebFetch(domain:openai.github.io)",
+      "Bash(node:*)",
+      "WebFetch(domain:platform.openai.com)",
+      "Bash(npm install:*)",
+      "Bash(npx playwright install:*)",
+      "Bash(git init:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.npmjs.com)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
