@@ -31,7 +31,7 @@ async function main(): Promise<void> {
     // Initialize ChatOpenAI with configuration
     const llm = new ChatOpenAI({
       apiKey: process.env.OPENAI_API_KEY || '',
-      model: 'o4-mini',
+      model: 'gpt-5-mini',
       temperature: 0.3, // Lower temperature for more consistent extraction
     });
     
@@ -47,22 +47,22 @@ async function main(): Promise<void> {
     // Execute flight search with login and filtering
     const openatorResult = await agentsPoc.start(
       `https://${domain}`,
-      `You are a flight assistant that helps find flight deals. Complete this task in the following steps in order:
+      `You are a flight assistant that helps find flight deals. Complete this task in the following phases in order:
 
-      STEP 1 - LOGIN:
+      PHASE 1 - LOGIN:
       1. Find and fill the login form on this website
       2. Look for username/email field and enter: {{username}}
       3. Look for password field and enter: {{password}}  
-      4. Click the login/sign-in button to authenticate
-      5. If modal is hidden, you can assume login was successful and don't have to repeat this process
+      4. Click the login/sign-in button to authenticate. Do not click the forgot password link.
+      5. After clicking, the modal should be hidden which means login was successful, if not, repeat the process until it is hidden.
 
-      STEP 2 - FILTER FOR FLIGHTS:
-      7. Click on the Filter input element to show the filters on the screen
+      PHASE 2 - FILTER FOR FLIGHTS:
+      7. Click on the Filter input element. This will show the filters on the screen
       8. Now only adjust the following filters:
         - Adjust "Quick Filter" to "Next Month"
       9. Filters should automatically apply and the page will update to show the filtered results
 
-      STEP 3 - EXTRACT FLIGHT DEALS:
+      PHASE 3 - EXTRACT FLIGHT DEALS:
       10. Extract the top 3-5 flight deals to destinations outside of United States and return them in this JSON format:
 
       -- Flight Deals JSON format --
@@ -87,7 +87,6 @@ async function main(): Promise<void> {
       IMPORTANT NOTES:
       - Use the variable {{username}} and {{password}} for login credentials
       - If login fails, describe what happened and try alternative login methods
-      - If no October flights are available, find the best available deals and note the actual timeframe
       - Extract real data from the page, not placeholder information
       - Return ONLY the JSON format requested above`
     );
