@@ -9,6 +9,7 @@
     "start:openator": "ts-node agent-openator-poc.ts",
     "start:grubhub": "ts-node agent-grubhub-poc.ts",
     "start:amazon": "ts-node agent-amazon-poc.ts",
+    "start:github": "ts-node agent-github-poc.ts",
     "dev": "ts-node --watch agent-poc.ts",
     "build": "tsc",
     "build:run": "npm run build && node dist/agent-poc.js",

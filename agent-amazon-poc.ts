@@ -57,7 +57,7 @@ async function main(): Promise<void> {
     const agentsPoc = initAgentsPoc({
       llm,
       headless: false, // Show browser for demo purposes
-      variables: [username, password, shippingAddress, searchTerms, budgetLimit]
+      variables: [username, password, shippingAddress, searchTerms, budgetLimit],
     });
     
     console.log('🔄 AgentsPoc is logging in and shopping on Amazon...\n');
@@ -76,6 +76,8 @@ async function main(): Promise<void> {
       6. Handle any CAPTCHA or verification challenges if they appear
       7. If 2FA is required, hand off to the user to solve it manually
       8. Wait for successful login confirmation, on main page, you should see "Hello, [Name]" in the top right corner
+
+      IMPORTANT: If you see "Hello, [Name]" in the top right corner, then you are logged in and can proceed to the next step. Do not attempt to login again if you see this.
 
       STEP 2 - PRODUCT SEARCH:
       9. Use the main search bar to search for: {{searchTerms}}
@@ -222,9 +224,9 @@ if (require.main === module) {
 
   // Wait for 180 seconds before exiting
   setTimeout(() => {
-    console.log('🔄 Waiting for 180 seconds...');
+    console.log('🔄 Waiting for 500 seconds...');
     process.exit(0);
-  }, 180000);
+  }, 500000);
 }
 
 export { main };

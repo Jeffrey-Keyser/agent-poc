@@ -36,7 +36,7 @@ async function main(): Promise<void> {
 
     const restaurantPreference = new Variable({
       name: 'restaurantPreference',
-      value: 'Italian', // TODO: Replace with preferred cuisine type or specific restaurant
+      value: 'El Tucanazo Taqueria',
       isSecret: false
     });
 
@@ -69,28 +69,23 @@ async function main(): Promise<void> {
       5. Click the login/sign-in button to authenticate
       6. Wait for successful login confirmation (usually redirects to main page or shows user profile)
 
-      STEP 2 - SET DELIVERY ADDRESS:
-      7. Look for delivery address input or "Deliver to" section
-      8. Enter or update the delivery address: {{deliveryAddress}}
-      9. Confirm the address is set correctly
+      STEP 2 - FIND RESTAURANT:
+      7. Search for restaurants using the cuisine preference: {{restaurantPreference}}
+      8. Select a well-rated restaurant from the search results (look for 4+ star ratings)
+      9. Navigate to the restaurant's menu page
 
-      STEP 3 - FIND RESTAURANT:
-      10. Search for restaurants using the cuisine preference: {{restaurantPreference}}
-      11. Select a well-rated restaurant from the search results (look for 4+ star ratings)
-      12. Navigate to the restaurant's menu page
+      STEP 3 - SELECT FOOD ITEMS:
+      10. Browse the menu and select 2-3 popular items (look for "Popular" or "Recommended" sections)
+      11. Add each item to cart, customizing options when presented
+      12. Ensure items are successfully added to cart (cart count should increase)
 
-      STEP 4 - SELECT FOOD ITEMS:
-      13. Browse the menu and select 2-3 popular items (look for "Popular" or "Recommended" sections)
-      14. Add each item to cart, customizing options when presented
-      15. Ensure items are successfully added to cart (cart count should increase)
+      STEP 4 - REVIEW CART:
+      13. Navigate to cart/checkout page
+      14. Review all selected items, quantities, and prices
+      15. Proceed to checkout (but DO NOT complete the final payment)
 
-      STEP 5 - REVIEW CART:
-      16. Navigate to cart/checkout page
-      17. Review all selected items, quantities, and prices
-      18. Proceed to checkout (but DO NOT complete the final payment)
-
-      STEP 6 - EXTRACT ORDER DETAILS:
-      19. Extract the order information and return it in this JSON format:
+      STEP 5 - EXTRACT ORDER DETAILS:
+      16. Extract the order information and return it in this JSON format:
 
       -- Grubhub Order JSON format --
       {
@@ -193,9 +188,9 @@ if (require.main === module) {
 
   // Wait for 180 seconds before exiting
   setTimeout(() => {
-    console.log('🔄 Waiting for 180 seconds...');
+    console.log('🔄 Waiting for 360 seconds...');
     process.exit(0);
-  }, 180000);
+  }, 360000);
 }
 
 export { main };

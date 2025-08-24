@@ -54,6 +54,8 @@ export const initAgentsPoc = (config: InitAgentsPocConfig): AgentsPoc => {
   const feedbackAgent = new FeedbackAgent(llm);
   const taskManager = new TaskManagerService();
 
+  const reporter = new ConsoleReporter('AgentsPoc');
+
   const summarizer = initSummarizer(llm);
   const summarizeTask = initSummarizeTask();
 
@@ -64,7 +66,7 @@ export const initAgentsPoc = (config: InitAgentsPocConfig): AgentsPoc => {
     browserService: browser,
     llmService: llm,
     feedbackAgent,
-    reporter: new ConsoleReporter('AgentsPoc'),
+    reporter,
     summarizer,
     summarizeTask,
   });
