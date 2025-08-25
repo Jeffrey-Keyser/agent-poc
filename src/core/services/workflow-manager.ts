@@ -240,10 +240,10 @@ export class WorkflowManager {
         }
       };
       
-      this.reporter.log(`🔍 Evaluator input: ${JSON.stringify(sanitizeForLogging(evaluatorInput))}`);
+      this.reporter.log(`🔍 Evaluator input: ${JSON.stringify(sanitizeForLogging(evaluatorInput), null, 2)}`);
       
       const evaluation = await this.evaluator.execute(evaluatorInput);
-      this.reporter.log(`🔍 Evaluator output: ${JSON.stringify(sanitizeForLogging(evaluation))}`);
+      this.reporter.log(`🔍 Evaluator output: ${JSON.stringify(sanitizeForLogging(evaluation), null, 2)}`);
       
       const stepResult: StepResult = {
         stepId: step.id,
