@@ -143,6 +143,10 @@ export class ChromiumBrowser implements Browser {
     await this.getPage().goBack();
   }
 
+  async getTitle(): Promise<string> {
+    return await this.getPage().title();
+  }
+
   async extractContent() {
     const html = await this.getPage().content();
     const dom = new JSDOM(html);

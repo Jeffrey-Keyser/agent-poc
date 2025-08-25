@@ -6,6 +6,20 @@ export type AppEvents = {
   'task:update': Task;
   'action:update': TaskAction;
   'pristine-screenshot:taken': string;
+  // Multi-agent workflow events
+  'workflow:started': any;
+  'workflow:planning': any;
+  'workflow:completed': any;
+  'workflow:error': any;
+  'step:started': any;
+  'step:completed': any;
+  'step:failed': any;
+  'task:started': any;
+  'task:completed': any;
+  'task:failed': any;
+  'replan:triggered': any;
+  // Memory system events
+  'memory:learning-added': any;
 };
 
 export interface EventBusInterface {
@@ -15,3 +29,6 @@ export interface EventBusInterface {
     callback: (data: AppEvents[E]) => void,
   ): void;
 }
+
+// Alias for backward compatibility with multi-agent implementation
+export type EnhancedEventBusInterface = EventBusInterface;

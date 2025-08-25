@@ -12,6 +12,7 @@ export interface Browser {
   getStablePage(): Promise<Page>;
   getPage(): Page;
   getPageUrl(): string;
+  getTitle(): Promise<string>; // Added for multi-agent architecture
   getPixelAbove(): Promise<number>;
   getPixelBelow(): Promise<number>;
   mouseClick(x: number, y: number): Promise<void>;

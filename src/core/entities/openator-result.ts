@@ -7,4 +7,6 @@ export type OpenatorResult = {
   reason: string;
   result: string;
   stepCount: number;
+  steps: number; // Added for compatibility with migration-service
+  errors: string[]; // Added for compatibility with migration-service
 };

@@ -149,7 +149,7 @@ export class AgentsPoc {
     }
   }
 
-  private async run(jobId?: string): Promise<OpenatorResult> {
+  public async run(jobId?: string): Promise<OpenatorResult> {
     return new Promise(async (resolve) => {
       this.reporter.loading('Starting manager agent');
 
@@ -165,6 +165,8 @@ export class AgentsPoc {
             status: 'failed',
             result: this.result,
             stepCount: this.stepCount,
+            steps: this.stepCount,
+            errors: ['Max number of retried reached'],
             reason:
               'Max number of retried reached. The agent was not able to complete the test.',
           });
@@ -198,6 +200,8 @@ export class AgentsPoc {
           reason: this.reason,
           result: this.result,
           stepCount: this.stepCount,
+          steps: this.stepCount,
+          errors: [this.reason],
         });
       }
 
@@ -210,6 +214,8 @@ export class AgentsPoc {
         reason: this.reason,
         result: this.result,
         stepCount: this.stepCount,
+        steps: this.stepCount,
+        errors: this.isSuccess ? [] : [this.reason],
       });
     });
   }

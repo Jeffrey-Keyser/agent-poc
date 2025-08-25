@@ -20,4 +20,8 @@ export class ConsoleReporter implements AgentReporter {
   info(message: string): void {
     console.log(`[${this.name}] 💡 ${message}`);
   }
+
+  log(message: string): void {
+    console.log(`[${this.name}] ${message}`);
+  }
 }
