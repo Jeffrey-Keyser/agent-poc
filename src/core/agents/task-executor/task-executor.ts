@@ -313,7 +313,7 @@ Use the element indices from the DOM state above.
                 extractedValue = await page.evaluate((xpath: string) => {
                   const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
                   const el = result.singleNodeValue as HTMLElement;
-                  return el ? el.textContent?.trim() || null : null;
+                  return el ? el.innerText?.trim() || null : null;
                 }, element.xpath);
               }
               
