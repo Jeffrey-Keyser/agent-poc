@@ -144,7 +144,7 @@ ${input.constraints.length > 0 ? `Constraints: ${input.constraints.join(', ')}` 
 ${pageContextInfo}
 ${hasVisualContext ? '\nVISUAL CONTEXT: A screenshot of the current page is included to help understand the page layout and available elements.' : ''}
 
-Create a strategic plan with 3-7 high-level steps that a human user would take to accomplish this goal.
+Create a strategic plan with a reasonable number of high-level steps that a human user would take to accomplish this goal.
 Remember: Think like a user, not a programmer. Use natural language and focus on intent.
 ${hasVisualContext ? 'Use the visual context to understand what\'s actually available on the page.' : ''}
 
@@ -169,11 +169,13 @@ CURRENT SITUATION:
 - Page Sections Available: ${context.currentState.visibleSections.join(', ')}
 - Available Actions: ${context.currentState.availableActions.join(', ')}
 
-COMPLETED STEPS:
+COMPLETED STEPS (DO NOT REPEAT THESE):
 ${completedStepsText}
 
-Based on the current page state and what's available, create a NEW strategic plan to achieve the original goal.
-The new plan should work with the current page state and available functionality.
+Based on what has been completed and the current page state, create a CONTINUATION plan with only the remaining steps needed to achieve the original goal.
+Do NOT repeat steps that have already been successfully completed.
+Start from where we are now, not from the beginning.
+The plan should work with the current page state and available functionality.
 
 Your response must be valid JSON in the format specified in the system prompt.
     `;

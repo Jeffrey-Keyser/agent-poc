@@ -5,7 +5,7 @@ import { ExecutorConfig, MicroAction, ActionResult } from '../../types/agent-typ
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { JsonOutputParser } from '@langchain/core/output_parsers';
 import { TASK_EXECUTOR_PROMPT } from './task-executor.prompt';
-import { DomService } from '../../../infra/services/dom-service';
+import { DomService, isTextNode } from '../../../infra/services/dom-service';
 import { VariableString } from '../../entities/variable-string';
 
 /**
@@ -88,9 +88,10 @@ export class TaskExecutorAgent implements ITaskExecutor {
 
           // Collect extracted data if present
           if (action.type === 'extract' && actionResult.extractedValue !== null) {
-            // Use the action description or a key based on the element index
-            const key = action.description || `element_${action.elementIndex}`;
+            // Only store element-specific extractions (no full page)
+            const key = action.description || `element_${action.elementIndex || Date.now()}`;
             extractedData[key] = actionResult.extractedValue;
+            console.log(`💾 Stored extracted data with key: ${key}`);
           }
 
           // Refresh page state after significant actions
@@ -293,24 +294,38 @@ Use the element indices from the DOM state above.
           return this.createSuccessResult(action, startTime);
 
         case 'extract':
-          // Extract text content from the specified element
+          // Extract text content from the specified element only
           let extractedValue: any = null;
           
           if (action.elementIndex !== undefined) {
+            // Element-specific extraction
             const { selectorMap } = await this.domService.getInteractiveElements();
             const element = selectorMap[action.elementIndex];
             
-            if (element && 'selector' in element && element.selector) {
-              // Get text content from the element
-              const page = this.browser.getPage();
-              const selector = element.selector as string;
-              extractedValue = await page.evaluate((sel: string) => {
-                const el = document.querySelector(sel);
-                return el ? el.textContent?.trim() || null : null;
-              }, selector);
+            if (element && !isTextNode(element)) {
+              // Directly use the text property from ElementNode
+              extractedValue = element.text?.trim() || null;
               
-              console.log(`📝 Extracted from element ${action.elementIndex}: ${extractedValue}`);
+              // If no text in the element itself, try to get all text from children using xpath
+              if (!extractedValue && element.xpath) {
+                // Fallback: use xpath to query the element
+                const page = this.browser.getPage();
+                extractedValue = await page.evaluate((xpath: string) => {
+                  const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                  const el = result.singleNodeValue as HTMLElement;
+                  return el ? el.textContent?.trim() || null : null;
+                }, element.xpath);
+              }
+              
+              console.log(`📝 Extracted from element ${action.elementIndex}: ${extractedValue?.substring(0, 100)}...`);
             }
+          } else {
+            // No element index provided - skip extraction
+            console.log(`⚠️ Skipping extraction action without element index: ${action.description}`);
+            return {
+              ...this.createSuccessResult(action, startTime),
+              extractedValue: null
+            };
           }
           
           return {

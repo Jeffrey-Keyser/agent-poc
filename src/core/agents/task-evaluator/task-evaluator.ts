@@ -45,7 +45,6 @@ export class TaskEvaluatorAgent implements ITaskEvaluator {
     const userPrompt = this.buildEvaluationPrompt(input);
     const messages = [systemMessage];
     
-    // NEW: Add before/after screenshots if available
     if (input.screenshots?.before && input.screenshots?.after) {
       messages.push(new HumanMessage({
         content: [
@@ -133,6 +132,16 @@ export class TaskEvaluatorAgent implements ITaskEvaluator {
 
     const stateComparison = this.buildStateComparison(beforeState, afterState);
     
+    // Special emphasis for extraction tasks
+    const extractionGuidance = step.intent === 'extract' ? `
+IMPORTANT: This is an EXTRACTION task. Success is determined by:
+1. Whether data was successfully extracted and stored in extractedData
+2. The presence of meaningful content in the extracted data
+3. The extracted data relates to the expected outcome
+
+Extracted Data Present: ${afterState.extractedData && Object.keys(afterState.extractedData).length > 0 ? 'YES' : 'NO'}
+` : '';
+
     return `
 STRATEGIC TASK EVALUATION:
 
@@ -142,7 +151,7 @@ TASK DETAILS:
 - Target Concept: ${step.targetConcept}
 - Expected Outcome: ${step.expectedOutcome}
 - Input Data: ${JSON.stringify(step.inputData)}
-
+${extractionGuidance}
 EXECUTION RESULTS:
 ${microActionsText}
 
@@ -155,7 +164,7 @@ ${this.calculateSuccessRate(results)} (${results.filter(r => r.success).length}/
 ${input.screenshots ? 'VISUAL EVIDENCE:\nCompare the before and after screenshots to verify task completion.' : ''}
 
 Based on this information, evaluate whether the STRATEGIC TASK was completed successfully.
-Remember: Focus on whether the expected outcome was achieved, not just whether micro-actions executed.
+${step.intent === 'extract' ? 'For extraction tasks: If meaningful data was extracted, the task is successful.' : 'Remember: Focus on whether the expected outcome was achieved, not just whether micro-actions executed.'}
 
 Your response must be valid JSON in the specified format.
     `;
@@ -199,9 +208,14 @@ Your response must be valid JSON in the specified format.
       changes.push(`New actions available: ${newActions.join(', ')}`);
     }
 
-    // Extracted data
-    if (afterState.extractedData) {
-      changes.push(`Data extracted: ${JSON.stringify(afterState.extractedData).substring(0, 200)}...`);
+    // Extracted data - Give this special attention for extraction tasks
+    if (afterState.extractedData && Object.keys(afterState.extractedData).length > 0) {
+      const dataKeys = Object.keys(afterState.extractedData);
+      const dataPreview = JSON.stringify(afterState.extractedData).substring(0, 500);
+      changes.push(`✅ Data successfully extracted (${dataKeys.length} keys): ${dataKeys.join(', ')}`);
+      changes.push(`Data preview: ${dataPreview}${dataPreview.length >= 500 ? '...' : ''}`);
+    } else if (beforeState.extractedData && !afterState.extractedData) {
+      changes.push(`⚠️ Previously extracted data was lost`);
     }
 
     return changes.length > 0 ? changes.join('\n') : 'No significant state changes detected';

@@ -18,12 +18,22 @@ SUCCESS INDICATORS:
 - Page state changed as anticipated
 - User-observable outcomes achieved
 
+SPECIAL RULES FOR EXTRACTION TASKS (intent: 'extract'):
+- If the intent is 'extract', success is ONLY determined by whether data was extracted
+- Check if afterState.extractedData contains meaningful data with actual values
+- The extracted data MUST have proper keys and non-empty values:
+  * Element extraction: keys like 'title', 'price', 'rating', etc. with actual text
+- Even if the page didn't change, extraction is successful if data was captured
+- The extracted data should relate to the expected outcome
+- Empty extractedData {} means FAILURE for extraction tasks
+- Log the actual keys found in extractedData in your evidence
+
 FAILURE INDICATORS:
 - Error messages are present
 - Expected elements are missing
-- Page didn't change when it should have
+- Page didn't change when it should have (except for extraction tasks)
 - Wrong page was loaded
-- Expected data not found
+- Expected data not found (empty extractedData for extraction tasks)
 - Actions had no visible effect
 
 EVALUATION PROCESS:
@@ -47,6 +57,23 @@ OUTPUT FORMAT (respond with valid JSON):
   "evidence": "Search results page loaded with 'wireless headphones' in URL and product listings visible",
   "reason": "Successfully executed search - URL changed to search results page and relevant products are displayed",
   "suggestions": ["Consider adding price filter validation", "Check for 'no results' scenario"]
+}
+
+EXTRACTION TASK EXAMPLE:
+If the task intent is 'extract' and afterState.extractedData contains:
+{
+  "Extract product title": "Bose QuietComfort Bluetooth Headphones",
+  "Extract price": "$229.00",
+  "Extract rating": "4.6 out of 5 stars",
+  "Extract review count": "13,032 ratings"
+}
+Then respond with something similar to this:
+{
+  "success": true,
+  "confidence": 0.95,
+  "evidence": "Data successfully extracted with specific product fields: title, price, rating, and review count",
+  "reason": "Extraction task completed - captured all requested product details as expected",
+  "suggestions": []
 }
 
 EVALUATION PRINCIPLES:

@@ -1,6 +1,7 @@
 import { PageState } from '../types/agent-types';
 import { Browser } from '../interfaces/browser.interface';
 import { DomService } from '@/infra/services/dom-service';
+import { truncateForLogging } from '../shared/utils';
 
 export class StateManager {
   private stateHistory: PageState[] = [];
@@ -298,6 +299,30 @@ export class StateManager {
 
   addExtractedData(key: string, value: any): void {
     this.extractedData.set(key, value);
+    console.log(`📝 Added extracted data - ${key}: ${truncateForLogging(value, 100)}`);
+  }
+
+  /**
+   * Merge multiple extracted data entries at once
+   * Used when receiving extracted data from TaskExecutor
+   */
+  mergeExtractedData(data: Record<string, any>): void {
+    for (const [key, value] of Object.entries(data)) {
+      this.extractedData.set(key, value);
+      console.log(`📝 Merged extracted data - ${key}: ${truncateForLogging(value, 100)}`);
+    }
+  }
+
+  /**
+   * Create a new state with specific extracted data
+   * Used when we need to create a state from executor results
+   */
+  async captureStateWithData(extractedData: Record<string, any>): Promise<PageState> {
+    // First merge the data
+    this.mergeExtractedData(extractedData);
+    
+    // Then capture the state normally
+    return this.captureState();
   }
 
   getExtractedData(key: string): any {

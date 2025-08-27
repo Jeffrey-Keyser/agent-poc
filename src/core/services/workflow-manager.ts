@@ -19,6 +19,7 @@ import { AgentReporter } from '../interfaces/agent-reporter.interface';
 import { StateManager } from './state-manager';
 import { MemoryService, MemoryContext } from './memory-service';
 import { VariableManager } from './variable-manager';
+import { truncateExtractedData } from '../shared/utils';
 
 export interface WorkflowManagerConfig {
   maxRetries?: number;
@@ -135,18 +136,24 @@ export class WorkflowManager {
       this.reporter.log(`📋 Strategic plan created with ${this.currentStrategy.steps.length} steps`);
       
       // Execute strategic steps with adaptive replanning
+      // Track which steps have been successfully completed
+      const successfullyCompletedSteps: StrategicTask[] = [];
+      
       for (let i = 0; i < this.currentStrategy.steps.length; i++) {
         const strategicStep = this.currentStrategy.steps[i];
         const result = await this.executeStrategicStep(strategicStep);
         
-        if (!result.success) {
+        if (result.success) {
+          successfullyCompletedSteps.push(strategicStep);
+        } else {
           if (this.config.enableReplanning) {
             this.reporter.log(`⚠️ Step failed, requesting replan...`);
             
             // Replan from current state when a step fails
+            // Pass successfully completed steps, not just slice by index
             const replanContext: ReplanContext = {
               originalGoal: goal,
-              completedSteps: this.currentStrategy.steps.slice(0, i),
+              completedSteps: successfullyCompletedSteps,
               failedStep: strategicStep,
               failureReason: result.errorReason || 'Step execution failed',
               currentState: await this.captureSemanticState()
@@ -219,12 +226,29 @@ export class WorkflowManager {
       const execution = await this.executor.execute(executorInput);
       
       // Capture state with screenshots after execution
-      const afterState = await this.captureSemanticState();
+      // IMPORTANT: Use executor's finalState if it contains extracted data
+      let afterState: PageState;
+      
+      if (execution.finalState?.extractedData && 
+          Object.keys(execution.finalState.extractedData).length > 0) {
+        // Use the executor's state which contains extracted data
+        afterState = execution.finalState;
+        
+        // Also update StateManager with the extracted data
+        for (const [key, value] of Object.entries(execution.finalState.extractedData)) {
+          this.stateManager.addExtractedData(key, value);
+        }
+        
+        this.reporter.log(`📊 Using extracted data from executor: ${JSON.stringify(truncateExtractedData(execution.finalState.extractedData))}`);
+      } else {
+        // Fall back to capturing new state if no extracted data
+        afterState = await this.captureSemanticState();
+      }
       
       // Merge any extracted data from the executor into our workflow's extracted data
       if (afterState.extractedData && Object.keys(afterState.extractedData).length > 0) {
         this.extractedData = { ...this.extractedData, ...afterState.extractedData };
-        this.reporter.log(`📊 Extracted data: ${JSON.stringify(afterState.extractedData)}`);
+        this.reporter.log(`📊 Extracted data: ${JSON.stringify(truncateExtractedData(afterState.extractedData))}`);
       }
       
       // MODIFIED: Pass screenshots to evaluator
@@ -244,6 +268,15 @@ export class WorkflowManager {
       
       const evaluation = await this.evaluator.execute(evaluatorInput);
       this.reporter.log(`🔍 Evaluator output: ${JSON.stringify(sanitizeForLogging(evaluation), null, 2)}`);
+      
+      // Debug logging for extraction data flow
+      if (step.intent === 'extract') {
+        this.reporter.log(`🔍 Debug - Extraction Task Results:`);
+        this.reporter.log(`  - Executor returned data: ${execution.finalState?.extractedData ? 'YES' : 'NO'}`);
+        this.reporter.log(`  - Data keys: ${Object.keys(execution.finalState?.extractedData || {}).join(', ')}`);
+        this.reporter.log(`  - AfterState has data: ${afterState.extractedData ? 'YES' : 'NO'}`);
+        this.reporter.log(`  - AfterState keys: ${Object.keys(afterState.extractedData || {}).join(', ')}`);
+      }
       
       const stepResult: StepResult = {
         stepId: step.id,

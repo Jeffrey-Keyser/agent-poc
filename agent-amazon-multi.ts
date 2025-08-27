@@ -1,6 +1,7 @@
 import { initMultiAgent } from './src/init-multi-agent';
 import { Variable } from './src/core/entities/variable';
 import { ChatOpenAI } from './src/models/chat-openai';
+import { truncateExtractedData } from './src/core/shared/utils';
 
 /**
  * Amazon Multi-Agent Workflow Example
@@ -19,7 +20,7 @@ async function main() {
   // Initialize the LLM for all agents
   const llm = new ChatOpenAI({
     apiKey: process.env.OPENAI_API_KEY!,
-    model: 'gpt-5-mini',
+    model: 'gpt-5-nano',
     temperature: 0.1
   });
   
@@ -60,7 +61,9 @@ async function main() {
     
     if (searchResult.status === 'success') {
       console.log('✅ Workflow completed successfully!');
-      console.log('📈 Extracted data:', searchResult.extractedData);
+      // Truncate full page content for display to keep output manageable
+      const displayData = truncateExtractedData(searchResult.extractedData, 500);
+      console.log('📈 Extracted data:', displayData);
     } else {
       console.log('⚠️ Workflow completed with issues:', searchResult.status);
     }

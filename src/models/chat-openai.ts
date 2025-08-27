@@ -8,7 +8,7 @@ export type ChatOpenAIConfig = {
    * The model to use.
    * @default gpt-4o
    */
-  model?: 'gpt-4o' | 'gpt-4o-mini' | 'gpt-4-turbo' | 'o4-mini' | 'gpt-5-mini';
+  model?: 'gpt-4o' | 'gpt-4o-mini' | 'gpt-4-turbo' | 'o4-mini' | 'gpt-5-mini' | 'gpt-5-nano';
   /**
    * The temperature to use. We recommend setting this to 0 for consistency.
    * @default 0
