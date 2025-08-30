@@ -23,6 +23,9 @@ SPECIAL RULES FOR EXTRACTION TASKS (intent: 'extract'):
 - Check if afterState.extractedData contains meaningful data with actual values
 - The extracted data MUST have proper keys and non-empty values:
   * Element extraction: keys like 'title', 'price', 'rating', etc. with actual text
+  * URL extraction: keys like 'product_url', 'detail_page_url', 'current_url' with valid URLs
+  * Href extraction: keys like 'link_href', 'product_link' with valid href values
+- Valid URLs start with http://, https://, or are relative paths starting with /
 - Even if the page didn't change, extraction is successful if data was captured
 - The extracted data should relate to the expected outcome
 - Empty extractedData {} means FAILURE for extraction tasks
@@ -59,7 +62,9 @@ OUTPUT FORMAT (respond with valid JSON):
   "suggestions": ["Consider adding price filter validation", "Check for 'no results' scenario"]
 }
 
-EXTRACTION TASK EXAMPLE:
+EXTRACTION TASK EXAMPLES:
+
+Example 1 - Text Extraction:
 If the task intent is 'extract' and afterState.extractedData contains:
 {
   "Extract product title": "Bose QuietComfort Bluetooth Headphones",
@@ -67,12 +72,27 @@ If the task intent is 'extract' and afterState.extractedData contains:
   "Extract rating": "4.6 out of 5 stars",
   "Extract review count": "13,032 ratings"
 }
-Then respond with something similar to this:
+Then respond with:
 {
   "success": true,
   "confidence": 0.95,
   "evidence": "Data successfully extracted with specific product fields: title, price, rating, and review count",
   "reason": "Extraction task completed - captured all requested product details as expected",
+  "suggestions": []
+}
+
+Example 2 - URL Extraction:
+If the task requires extracting a product URL and afterState.extractedData contains:
+{
+  "Extract current page URL": "https://amazon.com/dp/B09ABC123/...",
+  "Extract product detail URL": "https://amazon.com/Bose-QuietComfort.../dp/B09ABC123"
+}
+Then respond with:
+{
+  "success": true,
+  "confidence": 1.0,
+  "evidence": "Successfully extracted product URLs: current page URL and product detail URL both present and valid",
+  "reason": "URL extraction completed - captured the product detail page URL as requested",
   "suggestions": []
 }
 

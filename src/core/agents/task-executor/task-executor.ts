@@ -87,8 +87,7 @@ export class TaskExecutorAgent implements ITaskExecutor {
           }
 
           // Collect extracted data if present
-          if (action.type === 'extract' && actionResult.extractedValue !== null) {
-            // Only store element-specific extractions (no full page)
+          if ((action.type === 'extract' || action.type === 'extract_url' || action.type === 'extract_href') && actionResult.extractedValue !== null) {
             const key = action.description || `element_${action.elementIndex || Date.now()}`;
             extractedData[key] = actionResult.extractedValue;
             console.log(`💾 Stored extracted data with key: ${key}`);
@@ -331,6 +330,48 @@ Use the element indices from the DOM state above.
           return {
             ...this.createSuccessResult(action, startTime),
             extractedValue
+          };
+
+        case 'extract_url':
+          // Extract the current page URL directly
+          const currentUrl = this.browser.getPageUrl();
+          console.log(`🔗 Extracted current page URL: ${currentUrl}`);
+          return {
+            ...this.createSuccessResult(action, startTime),
+            extractedValue: currentUrl
+          };
+
+        case 'extract_href':
+          // Extract href attribute from a link element
+          let hrefValue: string | null = null;
+          
+          if (action.elementIndex !== undefined) {
+            const { selectorMap } = await this.domService.getInteractiveElements();
+            const element = selectorMap[action.elementIndex];
+            
+            if (element && !isTextNode(element)) {
+              // First check if the element has an href attribute
+              if (element.attributes?.href) {
+                hrefValue = element.attributes.href;
+              } else if (element.xpath) {
+                // Fallback: use xpath to get href from the actual DOM element
+                const page = this.browser.getPage();
+                hrefValue = await page.evaluate((xpath: string) => {
+                  const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                  const el = result.singleNodeValue as HTMLElement;
+                  return el ? (el as HTMLAnchorElement).href || el.getAttribute('href') : null;
+                }, element.xpath);
+              }
+              
+              console.log(`🔗 Extracted href from element ${action.elementIndex}: ${hrefValue}`);
+            }
+          } else {
+            console.log(`⚠️ No element index provided for extract_href action`);
+          }
+          
+          return {
+            ...this.createSuccessResult(action, startTime),
+            extractedValue: hrefValue
           };
 
         case 'clear':

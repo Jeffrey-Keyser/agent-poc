@@ -25,6 +25,8 @@ AVAILABLE MICRO-ACTION TYPES:
 - scroll: Scroll page up or down
 - wait: Wait for specified time in milliseconds
 - extract: Extract text content from specific element (with elementIndex)
+- extract_url: Extract the current page URL (no elementIndex needed)
+- extract_href: Extract href attribute from link element (requires elementIndex)
 - press_key: Press specific keyboard key
 - clear: Clear all content from input field
 - hover: Hover over element to trigger interactions
@@ -34,8 +36,8 @@ AVAILABLE MICRO-ACTION TYPES:
 
 MICRO-ACTION FORMAT:
 {
-  "type": "click|fill|scroll|wait|extract|press_key|clear|hover|select_option|wait_for_element|drag",
-  "elementIndex": number, // Index from provided elements list
+  "type": "click|fill|scroll|wait|extract|extract_url|extract_href|press_key|clear|hover|select_option|wait_for_element|drag",
+  "elementIndex": number, // Index from provided elements list (not needed for extract_url)
   "value": any, // For fill actions and wait duration
   "key": string, // For press_key actions like "Enter", "Tab"
   "options": string[], // For select_option action
@@ -68,7 +70,9 @@ SCROLLING GUIDELINES:
 4. Be aware that scrolling changes element indices - plan accordingly
 
 EXTRACTION GUIDELINES:
-- For extracting specific product details: use elementIndex to target the element
+- For extracting text content from elements: use 'extract' with elementIndex
+- For extracting the current page URL: use 'extract_url' (no elementIndex needed)
+- For extracting href links from anchor tags: use 'extract_href' with elementIndex
 - The extracted data will be stored and available for the evaluator
 
 OUTPUT FORMAT (respond with valid JSON):

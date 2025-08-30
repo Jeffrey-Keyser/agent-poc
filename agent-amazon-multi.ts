@@ -54,7 +54,7 @@ async function main() {
     
     // Example 1: Product search with price filtering
     const searchResult = await workflow.executeWorkflow(
-      'Search Amazon for dark roast caffeinated coffee beans and return information about the first item that has a rating of 4.5 or higher.'
+      'Search Amazon for dark roast caffeinated coffee beans and return the URL of the first item that has a rating of 4.5 or higher.'
     );
     
     console.log('📊 Search Results:', searchResult);
@@ -67,24 +67,6 @@ async function main() {
     } else {
       console.log('⚠️ Workflow completed with issues:', searchResult.status);
     }
-    
-    // Example 2: Category browsing (uncomment to try)
-    /*
-    const browseResult = await workflow.executeWorkflow(
-      'Navigate to Electronics category, then to Computer Accessories, and extract the featured products'
-    );
-    
-    console.log('📱 Browse Results:', browseResult);
-    */
-    
-    // Example 3: Product comparison (uncomment to try)
-    /*
-    const compareResult = await workflow.executeWorkflow(
-      'Search for "laptop stand" and compare the first 3 products by extracting their key features and prices'
-    );
-    
-    console.log('⚖️ Comparison Results:', compareResult);
-    */
     
   } catch (error) {
     console.error('💥 Workflow error:', error instanceof Error ? error.message : String(error));

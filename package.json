@@ -11,6 +11,7 @@
     "start:amazon": "ts-node agent-amazon-poc.ts",
     "start:github": "ts-node agent-github-poc.ts",
     "start:amazon-multi": "ts-node agent-amazon-multi.ts",
+    "test:url-extraction": "ts-node test-url-extraction.ts",
     "dev": "ts-node --watch agent-poc.ts",
     "build": "tsc",
     "build:run": "npm run build && node dist/agent-poc.js",

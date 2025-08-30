@@ -15,7 +15,8 @@ export interface StrategicTask {
 // Tactical level - what the Executor creates at runtime
 export interface MicroAction {
   type: 'click' | 'fill' | 'scroll' | 'wait' | 'extract' | 'press_key' | 
-        'clear' | 'hover' | 'select_option' | 'wait_for_element' | 'drag';
+        'clear' | 'hover' | 'select_option' | 'wait_for_element' | 'drag' |
+        'extract_url' | 'extract_href';
   selector?: string; // Determined at execution time from DOM
   elementIndex?: number; // Index from getInteractiveElements()
   value?: any;
