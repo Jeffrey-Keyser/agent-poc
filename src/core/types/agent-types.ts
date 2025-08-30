@@ -14,13 +14,19 @@ export interface StrategicTask {
 
 // Tactical level - what the Executor creates at runtime
 export interface MicroAction {
-  type: 'click' | 'fill' | 'scroll' | 'wait' | 'extract' | 'press_key';
+  type: 'click' | 'fill' | 'scroll' | 'wait' | 'extract' | 'press_key' | 
+        'clear' | 'hover' | 'select_option' | 'wait_for_element' | 'drag';
   selector?: string; // Determined at execution time from DOM
   elementIndex?: number; // Index from getInteractiveElements()
   value?: any;
   element?: DOMElement; // Actual element from current page state
   description?: string; // For debugging and logging
   key?: string; // For press_key actions
+  options?: string[]; // For select_option action
+  waitCondition?: 'visible' | 'hidden' | 'attached' | 'detached'; // For wait_for_element
+  timeout?: number; // For wait_for_element (in milliseconds)
+  startIndex?: number; // For drag action - starting element index
+  endIndex?: number; // For drag action - ending element index
 }
 
 export interface StrategicPlan {
@@ -152,6 +158,8 @@ export interface WorkflowResult {
   finalState?: PageState;
   summary: string;
   errors?: string[]; // Added for compatibility with migration-service
+  structuredSummary?: any;  // SummarizerOutput from agent.interface
+  cleanData?: any;           // Cleaned extracted fields
 }
 
 // Multi-agent system configuration
@@ -164,6 +172,7 @@ export interface MultiAgentConfig {
     executor?: string;
     evaluator?: string;
     errorHandler?: string;
+    summarizer?: string;
   };
   maxRetries?: number;
   timeout?: number;

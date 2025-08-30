@@ -526,3 +526,15 @@ For issues and questions:
 ---
 
 **Note**: This project is under active development. The multi-agent system is the recommended approach for new implementations, while the legacy system remains available for stability-critical applications.
+
+Potential support:
+  Certifying, loading, initializing, and unloading a given AI model
+  Calling a model with context
+  Parsing the output from the model
+  Certifying, loading, initializing, and unloading tools
+  Calling a tool
+  Parsing the results from a tool call
+  Storing the results from a tool call into memory
+  Asking the user for input
+  Adding content to a history memory
+  Standard control constructs such as conditionals, sequencing, etc.

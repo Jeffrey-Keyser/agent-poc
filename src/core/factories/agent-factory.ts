@@ -3,7 +3,7 @@ import { Browser } from '../interfaces/browser.interface';
 import { AgentReporter } from '../interfaces/agent-reporter.interface';
 import { EnhancedEventBusInterface } from '../interfaces/event-bus.interface';
 
-import { ITaskPlanner, ITaskExecutor, ITaskEvaluator } from '../interfaces/agent.interface';
+import { ITaskPlanner, ITaskExecutor, ITaskEvaluator, ITaskSummarizer } from '../interfaces/agent.interface';
 import { 
   PlannerConfig, 
   ExecutorConfig, 
@@ -15,6 +15,7 @@ import { TaskPlannerAgent } from '../agents/task-planner/task-planner';
 import { TaskExecutorAgent } from '../agents/task-executor/task-executor';
 import { TaskEvaluatorAgent } from '../agents/task-evaluator/task-evaluator';
 import { ErrorHandlerAgent } from '../agents/error-handler/error-handler';
+import { TaskSummarizerAgent, SummarizerConfig } from '../agents/task-summarizer';
 import { WorkflowManager } from '../services/workflow-manager';
 import { DomService } from '@/infra/services/dom-service';
 
@@ -65,6 +66,14 @@ export class AgentFactory {
   }
   
   /**
+   * Create a Task Summarizer Agent for generating clean workflow summaries
+   * Uses efficient models for structured data extraction and cleaning
+   */
+  static createSummarizer(config: SummarizerConfig): ITaskSummarizer {
+    return new TaskSummarizerAgent(config.llm, config);
+  }
+  
+  /**
    * Create a complete Workflow Manager with all agents configured
    * This is the main orchestrator that coordinates all specialized agents
    */
@@ -90,6 +99,15 @@ export class AgentFactory {
    * Automatically selects appropriate models for different agent types
    */
   static createOptimizedAgents(config: MultiAgentConfig, infrastructure: AgentInfrastructure): WorkflowManager {
+    // Create the summarizer if configured
+    const summarizer = this.createSummarizer({
+      llm: infrastructure.llm,
+      model: config.models?.summarizer || 'gpt-4o-mini',
+      maxRetries: config.maxRetries || 3,
+      includeRecommendations: true,
+      maxSummaryLength: 500
+    });
+    
     const optimizedConfig: WorkflowManagerFactoryConfig = {
       planner: {
         llm: infrastructure.llm,
@@ -124,7 +142,8 @@ export class AgentFactory {
       workflow: {
         maxRetries: config.maxRetries || 3,
         timeout: config.timeout || 300000,
-        enableReplanning: true
+        enableReplanning: true,
+        summarizer  // Add the summarizer to workflow config
       }
     };
     
@@ -148,6 +167,7 @@ export interface WorkflowManagerFactoryConfig {
     maxRetries?: number;
     timeout?: number;
     enableReplanning?: boolean;
+    summarizer?: ITaskSummarizer;
   };
 }
 

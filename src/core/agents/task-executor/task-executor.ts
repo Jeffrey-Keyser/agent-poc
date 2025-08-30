@@ -333,6 +333,86 @@ Use the element indices from the DOM state above.
             extractedValue
           };
 
+        case 'clear':
+          if (action.elementIndex !== undefined) {
+            const coordinates = this.domService.getIndexSelector(action.elementIndex);
+            if (coordinates) {
+              await this.domService.resetHighlightElements();
+              await this.domService.highlightElementPointer(coordinates);
+              await this.browser.clearInput(coordinates);
+              await this.domService.resetHighlightElements();
+              return this.createSuccessResult(action, startTime);
+            } else {
+              throw new Error(`Coordinates not found for element index ${action.elementIndex}`);
+            }
+          }
+          throw new Error('Element index missing for clear action');
+
+        case 'hover':
+          if (action.elementIndex !== undefined) {
+            const coordinates = this.domService.getIndexSelector(action.elementIndex);
+            if (coordinates) {
+              await this.domService.resetHighlightElements();
+              await this.domService.highlightElementPointer(coordinates);
+              await this.browser.hover(coordinates);
+              await this.domService.resetHighlightElements();
+              return this.createSuccessResult(action, startTime);
+            } else {
+              throw new Error(`Coordinates not found for element index ${action.elementIndex}`);
+            }
+          }
+          throw new Error('Element index missing for hover action');
+
+        case 'select_option':
+          if (action.elementIndex !== undefined && action.options) {
+            const coordinates = this.domService.getIndexSelector(action.elementIndex);
+            if (coordinates) {
+              await this.domService.resetHighlightElements();
+              await this.domService.highlightElementPointer(coordinates);
+              await this.browser.selectOption(coordinates, action.options);
+              await this.domService.resetHighlightElements();
+              return this.createSuccessResult(action, startTime);
+            } else {
+              throw new Error(`Coordinates not found for element index ${action.elementIndex}`);
+            }
+          }
+          throw new Error('Element index or options missing for select_option action');
+
+        case 'wait_for_element':
+          if (action.elementIndex !== undefined) {
+            const { selectorMap } = await this.domService.getInteractiveElements();
+            const element = selectorMap[action.elementIndex];
+            if (element && !isTextNode(element) && element.xpath) {
+              // Convert XPath to CSS selector if possible, or use XPath directly
+              const selector = element.xpath;
+              await this.browser.waitForElement(
+                selector,
+                action.waitCondition || 'visible',
+                action.timeout || 5000
+              );
+              return this.createSuccessResult(action, startTime);
+            } else {
+              throw new Error(`Element not found or has no xpath for index ${action.elementIndex}`);
+            }
+          }
+          throw new Error('Element index missing for wait_for_element action');
+
+        case 'drag':
+          if (action.startIndex !== undefined && action.endIndex !== undefined) {
+            const startCoords = this.domService.getIndexSelector(action.startIndex);
+            const endCoords = this.domService.getIndexSelector(action.endIndex);
+            if (startCoords && endCoords) {
+              await this.domService.resetHighlightElements();
+              await this.domService.highlightElementPointer(startCoords);
+              await this.browser.drag(startCoords, endCoords);
+              await this.domService.resetHighlightElements();
+              return this.createSuccessResult(action, startTime);
+            } else {
+              throw new Error(`Coordinates not found for drag action (start: ${action.startIndex}, end: ${action.endIndex})`);
+            }
+          }
+          throw new Error('Start or end index missing for drag action');
+
         default:
           throw new Error(`Unknown action type: ${action.type}`);
       }
@@ -379,7 +459,12 @@ Use the element indices from the DOM state above.
       elementIndex: action.elementIndex,
       value: action.value,
       key: action.key,
-      description: action.description
+      description: action.description,
+      options: action.options,
+      waitCondition: action.waitCondition,
+      timeout: action.timeout,
+      startIndex: action.startIndex,
+      endIndex: action.endIndex
     }));
   }
 

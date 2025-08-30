@@ -54,7 +54,7 @@ async function main() {
     
     // Example 1: Product search with price filtering
     const searchResult = await workflow.executeWorkflow(
-      'Search Amazon for black Bose wireless headphones and extract the top 1 result with its price and ratings'
+      'Search Amazon for dark roast caffeinated coffee beans and return information about the first item that has a rating of 4.5 or higher.'
     );
     
     console.log('📊 Search Results:', searchResult);

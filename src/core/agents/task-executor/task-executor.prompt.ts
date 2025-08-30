@@ -26,13 +26,23 @@ AVAILABLE MICRO-ACTION TYPES:
 - wait: Wait for specified time in milliseconds
 - extract: Extract text content from specific element (with elementIndex)
 - press_key: Press specific keyboard key
+- clear: Clear all content from input field
+- hover: Hover over element to trigger interactions
+- select_option: Select option(s) from dropdown
+- wait_for_element: Wait for element to appear/disappear
+- drag: Drag from one element to another
 
 MICRO-ACTION FORMAT:
 {
-  "type": "click|fill|scroll|wait|extract|press_key",
+  "type": "click|fill|scroll|wait|extract|press_key|clear|hover|select_option|wait_for_element|drag",
   "elementIndex": number, // Index from provided elements list
   "value": any, // For fill actions and wait duration
   "key": string, // For press_key actions like "Enter", "Tab"
+  "options": string[], // For select_option action
+  "waitCondition": "visible|hidden|attached|detached", // For wait_for_element
+  "timeout": number, // For wait_for_element (milliseconds)
+  "startIndex": number, // For drag - starting element index
+  "endIndex": number, // For drag - ending element index
   "description": string // Brief description for debugging
 }
 

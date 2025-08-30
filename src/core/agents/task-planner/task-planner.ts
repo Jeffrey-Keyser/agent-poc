@@ -169,11 +169,11 @@ CURRENT SITUATION:
 - Page Sections Available: ${context.currentState.visibleSections.join(', ')}
 - Available Actions: ${context.currentState.availableActions.join(', ')}
 
-COMPLETED STEPS (DO NOT REPEAT THESE):
+COMPLETED STEPS (TRY NOT TO REPEAT THESE UNLESS NECESSARY):
 ${completedStepsText}
 
 Based on what has been completed and the current page state, create a CONTINUATION plan with only the remaining steps needed to achieve the original goal.
-Do NOT repeat steps that have already been successfully completed.
+Do NOT repeat steps that have already been successfully completed unless you deem it absolutely necessary.
 Start from where we are now, not from the beginning.
 The plan should work with the current page state and available functionality.
 

@@ -57,14 +57,14 @@ Add these interfaces to the existing file (don't remove existing content):
 
 export interface SummarizerInput {
   goal: string;                           // Original workflow goal
-  plan: StrategicTask[];                  // The planned strategy
-  completedSteps: StepResult[];           // Results from each step
-  extractedData: Record<string, any>;     // Raw extracted data
+  plan: StrategicTask[];                  // The planned strategy from StrategicPlan.steps
+  completedSteps: StepResult[];           // Array of step results (from Map values)
+  extractedData: Record<string, any>;     // Raw extracted data collected during workflow
   totalDuration: number;                  // Total time in milliseconds
   startTime: Date;                        // When workflow started
   endTime: Date;                          // When workflow ended
-  errors?: string[];                      // Any errors encountered
-  url?: string;                           // Final URL
+  errors?: string[];                      // Errors collected from failed steps
+  url?: string;                           // Final URL from browser
 }
 
 export interface SummarizerOutput {
@@ -73,25 +73,11 @@ export interface SummarizerOutput {
   status: 'completed' | 'partial' | 'failed';
   summary: string;                        // Executive summary (2-3 sentences)
   
-  // Key findings organized by category
-  keyFindings: {
-    category: string;                     // e.g., "product", "price", "availability"
+  // Extracted fields organized by category
+  extractedFields: {
     label: string;                        // Human-readable label
     value: any;                           // The actual value
-    confidence: number;                   // 0.0 to 1.0
     source?: string;                      // Which step provided this
-  }[];
-  
-  // Specific product data if extraction workflow
-  extractedProducts?: {
-    name: string;
-    price: string;                        // Cleaned price (e.g., "$25.99")
-    rating?: string;                      // e.g., "4.5 stars"
-    reviews?: string;                     // e.g., "1,234 reviews"
-    availability?: string;
-    brand?: string;
-    category?: string;
-    [key: string]: any;                   // Additional fields
   }[];
   
   // Performance metrics
@@ -100,7 +86,6 @@ export interface SummarizerOutput {
     successfulSteps: number;
     failedSteps: number;
     duration: string;                     // Human-readable (e.g., "2m 35s")
-    averageStepTime: number;              // In milliseconds
   };
   
   // Optional recommendations for future runs
@@ -129,92 +114,142 @@ CORE RESPONSIBILITIES:
 1. Extract and clean meaningful data from raw workflow results
 2. Organize information into structured, consumable formats
 3. Remove technical artifacts (CSS, JavaScript, HTML) from extracted text
-4. Provide executive summaries and key findings
+4. Provide executive summaries and extracted fields
 5. Calculate performance metrics
 
-DATA CLEANING RULES:
-- Remove all CSS styles, JavaScript code, and HTML tags from text
-- Extract only visible, meaningful text content
-- Normalize prices to standard format (e.g., "$25.99")
-- Clean ratings to simple format (e.g., "4.5 stars", "1,234 reviews")
-- Trim excessive whitespace and formatting
+DATA PROCESSING:
+- Clean and extract meaningful data from raw HTML/CSS/JavaScript content
+- Transform messy text into structured, readable format
+- Identify and extract key information relevant to the workflow goal
+- Present data in a clear, consumable format
 
 CATEGORIZATION GUIDELINES:
-Identify and categorize extracted information as:
+Dynamically categorize extracted information based on workflow context:
+
+EXAMPLES:
+
+For E-commerce/Shopping:
 - product: Product names, descriptions, SKUs
-- price: Prices, discounts, shipping costs
+- price: Prices, discounts, shipping costs  
 - availability: Stock status, delivery times
-- rating: Star ratings, review counts, sentiment
-- metadata: Brand, category, seller information
-- action: What was done (added to cart, viewed, compared)
+- rating: Star ratings, review counts
+
+For Authentication/Profile Management:
+- username: Account identifiers, display names
+- profileData: Bio, descriptions, settings
+- status: Login success, update confirmations
+- metadata: Join dates, follower counts, activity stats
+
+For Form Submissions:
+- formFields: Input values, selections made
+- validationStatus: Success/error messages
+- confirmations: Reference numbers, submission IDs
+- nextSteps: Follow-up actions required
+
+For Data Extraction:
+- primaryData: Main content extracted
+- relatedData: Supporting information
+- sourceMetadata: URLs, timestamps, page titles
+- dataQuality: Completeness indicators
+
+Always adapt categories to the specific workflow context
 
 OUTPUT STRUCTURE:
 Generate a JSON response with:
 1. Executive summary (2-3 sentences of what was accomplished)
-2. Key findings organized by category with confidence scores
-3. Cleaned product data (if applicable)
-4. Performance metrics
-5. Recommendations for optimization (if any issues detected)
+2. Cleaned data (if applicable)
+3. Performance metrics
+4. Recommendations for optimization (if any issues detected)
 
-SPECIAL HANDLING:
+SPECIAL HANDLING BY WORKFLOW TYPE:
 
-For E-commerce Extractions:
-- Focus on product details, pricing, availability
-- Clean price data to show only the actual price
-- Normalize rating formats
-- Extract brand and category if available
+EXAMPLES:
 
-For Navigation Workflows:
-- Summarize the journey taken
-- Highlight key pages visited
-- Note any obstacles encountered
+For Authentication/Profile Management:
+- Confirm successful login/logout
+- Summarize profile changes made
+- Extract user metadata (username, join date, stats)
+- Note any security challenges (2FA, captcha)
 
 For Form Submissions:
 - Confirm what was submitted
-- Note confirmation messages
+- Extract confirmation/reference numbers
+- Note validation messages
 - Flag any errors or warnings
 
-CONFIDENCE SCORING:
-- 1.0: Data explicitly found and clearly formatted
-- 0.8-0.9: Data found with high confidence
-- 0.6-0.7: Data inferred or partially available
-- Below 0.6: Uncertain or missing data
+For E-commerce/Shopping:
+- Focus on product details, pricing, availability
+- Clean price data to show only the actual price
+- Extract shipping and delivery information
+- Note items added to cart or wishlist
 
-EXAMPLE OUTPUT FORMAT:
+For Data Extraction:
+- Identify primary vs secondary data
+- Note data quality and completeness
+- Extract source metadata
+- Flag missing or incomplete fields
+
+For Navigation/Browsing:
+- Summarize the journey taken
+- Highlight key pages visited
+- Note any obstacles encountered
+- Extract final destination URL
+
+EXAMPLE OUTPUT FORMATS:
+
+Authentication Workflow:
 {
-  "summary": "Successfully searched Amazon for wireless headphones and extracted details of the top-rated Bose QuietComfort model priced at $229.00.",
-  "keyFindings": [
+  "summary": "Successfully authenticated GitHub account and updated profile bio with new description.",
+  "extractedFields": [
     {
-      "category": "product",
-      "label": "Product Name",
-      "value": "Bose QuietComfort Wireless Headphones",
-      "confidence": 0.95,
-      "source": "step-5"
+      "label": "Username",
+      "value": "john-doe-developer",
+      "source": "step-1"
     },
     {
-      "category": "price",
-      "label": "Current Price",
-      "value": "$229.00",
-      "confidence": 0.9,
-      "source": "step-5"
+      "label": "Profile URL",
+      "value": "https://github.com/john-doe-developer",
+      "source": "step-8"
+    },
+    {
+      "label": "Bio Updated",
+      "value": "Software developer passionate about automation",
+      "source": "step-6"
     }
   ],
-  "extractedProducts": [
+  "performanceMetrics": {
+    "totalSteps": 8,
+    "successfulSteps": 8,
+    "failedSteps": 0,
+    "duration": "1m 23s",
+  }
+}
+
+E-commerce Workflow:
+{
+  "summary": "Found and added organic dark roast coffee to cart matching all criteria.",
+  "extractedFields": [
     {
-      "name": "Bose QuietComfort Wireless Headphones",
-      "price": "$229.00",
-      "rating": "4.6 stars",
-      "reviews": "13,043 reviews",
-      "availability": "In Stock",
-      "brand": "Bose"
+      "label": "Product Name",
+      "value": "Organic Dark Roast Coffee Beans",
+      "source": "step-3"
+    },
+    {
+      "label": "Price",
+      "value": "$24.99",
+      "source": "step-3"
+    },
+    {
+      "label": "Rating",
+      "value": "4.7 stars (1,234 reviews)",
+      "source": "step-3"
     }
   ],
   "performanceMetrics": {
     "totalSteps": 5,
     "successfulSteps": 5,
     "failedSteps": 0,
-    "duration": "3m 42s",
-    "averageStepTime": 44400
+    "duration": "2m 15s",
   }
 }
 
@@ -235,10 +270,8 @@ import { JsonOutputParser } from '@langchain/core/output_parsers';
 import { TASK_SUMMARIZER_PROMPT } from './task-summarizer.prompt';
 
 export interface SummarizerConfig extends AgentConfig {
-  cleanExtractedData?: boolean;         // Default: true
   includeRecommendations?: boolean;     // Default: true
   maxSummaryLength?: number;            // Default: 500 characters
-  extractPricePatterns?: RegExp[];      // Custom price extraction patterns
 }
 
 /**
@@ -262,27 +295,19 @@ export class TaskSummarizerAgent implements ITaskSummarizer {
   private llm: LLM;
   private config: SummarizerConfig;
   
-  // Default price patterns for common formats
-  private pricePatterns = [
-    /\$[\d,]+\.?\d*/,                    // $229.00 or $1,234.56
-    /USD\s*[\d,]+\.?\d*/i,               // USD 229.00
-    /[\d,]+\.?\d*\s*(?:dollars?|usd)/i,  // 229 dollars
-  ];
+  // No extraction patterns needed - fields are simply mapped as strings
 
   constructor(llm: LLM, config: SummarizerConfig) {
     this.llm = llm;
     this.model = config.model;
     this.maxRetries = config.maxRetries || 3;
     this.config = {
-      cleanExtractedData: true,
       includeRecommendations: true,
       maxSummaryLength: 500,
       ...config
     };
     
-    if (config.extractPricePatterns) {
-      this.pricePatterns = [...this.pricePatterns, ...config.extractPricePatterns];
-    }
+    // Configuration initialized
   }
 
   /**
@@ -293,11 +318,10 @@ export class TaskSummarizerAgent implements ITaskSummarizer {
       throw new Error('Invalid summarizer input provided');
     }
 
-    // Pre-process the data to help the LLM
-    const cleanedData = this.preCleanData(input.extractedData);
+    // Pass the raw data directly to the LLM for processing
     
     const systemMessage = new SystemMessage({ content: TASK_SUMMARIZER_PROMPT });
-    const userPrompt = this.buildUserPrompt(input, cleanedData);
+    const userPrompt = this.buildUserPrompt(input, input.extractedData);
     const messages = [systemMessage, new HumanMessage({ content: userPrompt })];
     
     const parser = new JsonOutputParser<any>();
@@ -313,67 +337,13 @@ export class TaskSummarizerAgent implements ITaskSummarizer {
     return output;
   }
 
-  /**
-   * Pre-clean extracted data to help the LLM
-   */
-  private preCleanData(rawData: Record<string, any>): Record<string, any> {
-    if (!this.config.cleanExtractedData) {
-      return rawData;
-    }
+  // Removed preCleanData - LLM handles cleaning directly
 
-    const cleaned: Record<string, any> = {};
-    
-    for (const [key, value] of Object.entries(rawData)) {
-      if (typeof value === 'string') {
-        // Remove CSS styles
-        let cleanValue = value.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
-        
-        // Remove script tags and content
-        cleanValue = cleanValue.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
-        
-        // Remove HTML tags but keep content
-        cleanValue = cleanValue.replace(/<[^>]+>/g, ' ');
-        
-        // Clean up whitespace
-        cleanValue = cleanValue.replace(/\s+/g, ' ').trim();
-        
-        // Extract price if it looks like a price field
-        if (key.toLowerCase().includes('price')) {
-          const priceMatch = this.extractPrice(cleanValue);
-          if (priceMatch) {
-            cleanValue = priceMatch;
-          }
-        }
-        
-        // Only keep if there's meaningful content
-        if (cleanValue && cleanValue.length > 0) {
-          cleaned[key] = cleanValue;
-        }
-      } else {
-        cleaned[key] = value;
-      }
-    }
-    
-    return cleaned;
-  }
-
-  /**
-   * Extract price from messy text
-   */
-  private extractPrice(text: string): string | null {
-    for (const pattern of this.pricePatterns) {
-      const match = text.match(pattern);
-      if (match) {
-        return match[0];
-      }
-    }
-    return null;
-  }
 
   /**
    * Build the prompt for the LLM
    */
-  private buildUserPrompt(input: SummarizerInput, cleanedData: Record<string, any>): string {
+  private buildUserPrompt(input: SummarizerInput, rawData: Record<string, any>): string {
     const successfulSteps = input.completedSteps.filter(s => s.success).length;
     const failedSteps = input.completedSteps.length - successfulSteps;
     
@@ -394,11 +364,11 @@ ${input.plan.map((task, i) => `${i + 1}. ${task.name} - ${task.expectedOutcome}`
 
 STEP RESULTS:
 ${input.completedSteps.map(step => 
-  `- Step ${step.stepId}: ${step.success ? '✓ Success' : '✗ Failed'} ${step.reason || ''}`
+  `- Step ${step.stepId}: ${step.status === 'success' ? '✓ Success' : '✗ Failed'} ${step.errorReason || ''}`
 ).join('\n')}
 
-EXTRACTED DATA (Pre-cleaned):
-${JSON.stringify(cleanedData, null, 2)}
+EXTRACTED DATA:
+${JSON.stringify(rawData, null, 2)}
 
 ${input.errors && input.errors.length > 0 ? `
 ERRORS ENCOUNTERED:
@@ -417,8 +387,8 @@ Focus on extracting clean, actionable data from the results.
   private buildOutput(input: SummarizerInput, llmResponse: any): SummarizerOutput {
     const workflowId = `workflow-${Date.now()}`;
     const totalSteps = input.plan.length;
-    const successfulSteps = input.completedSteps.filter(s => s.success).length;
-    const failedSteps = totalSteps - successfulSteps;
+    const successfulSteps = input.completedSteps.filter(s => s.status === 'success').length;
+    const failedSteps = input.completedSteps.filter(s => s.status !== 'success').length;
     
     // Determine status
     let status: 'completed' | 'partial' | 'failed';
@@ -435,14 +405,12 @@ Focus on extracting clean, actionable data from the results.
       objective: input.goal,
       status,
       summary: llmResponse.summary || this.generateDefaultSummary(input, status),
-      keyFindings: llmResponse.keyFindings || [],
-      extractedProducts: llmResponse.extractedProducts,
+      extractedFields: llmResponse.extractedFields || [],
       performanceMetrics: {
         totalSteps,
         successfulSteps,
         failedSteps,
-        duration: this.formatDuration(input.totalDuration),
-        averageStepTime: Math.round(input.totalDuration / totalSteps)
+        duration: this.formatDuration(input.totalDuration)
       },
       recommendations: this.config.includeRecommendations ? 
         (llmResponse.recommendations || this.generateRecommendations(input)) : 
@@ -474,7 +442,7 @@ Focus on extracting clean, actionable data from the results.
     }
     
     // Check for failures
-    const failedSteps = input.completedSteps.filter(s => !s.success);
+    const failedSteps = input.completedSteps.filter(s => s.status !== 'success');
     if (failedSteps.length > 0) {
       recommendations.push(`Investigate failures in steps: ${failedSteps.map(s => s.stepId).join(', ')}`);
     }
@@ -511,7 +479,13 @@ Focus on extracting clean, actionable data from the results.
       input.completedSteps &&
       Array.isArray(input.completedSteps) &&
       input.startTime &&
-      input.endTime
+      input.endTime &&
+      // Validate StepResult structure
+      input.completedSteps.every(step => 
+        step.stepId && 
+        step.status && 
+        typeof step.duration === 'number'
+      )
     );
   }
 
@@ -525,8 +499,8 @@ Focus on extracting clean, actionable data from the results.
       output.objective &&
       output.status &&
       output.summary &&
-      output.keyFindings &&
-      Array.isArray(output.keyFindings) &&
+      output.extractedFields &&
+      Array.isArray(output.extractedFields) &&
       output.performanceMetrics &&
       output.timestamp
     );
@@ -573,23 +547,28 @@ static createSummarizer(config: SummarizerConfig): ITaskSummarizer {
 private summarizer?: ITaskSummarizer;
 ```
 
-2. Add it to the constructor:
+2. Modify the constructor to accept summarizer in the config:
 ```typescript
+export interface WorkflowManagerConfig {
+  maxRetries?: number;
+  timeout?: number;
+  enableReplanning?: boolean;
+  variableManager?: VariableManager;
+  summarizer?: ITaskSummarizer;  // Add this field
+}
+
 constructor(
-  planner: ITaskPlanner,
-  executor: ITaskExecutor,
-  evaluator: ITaskEvaluator,
-  errorHandler: IErrorHandler,
-  browser: Browser,
-  stateManager: StateManager,
-  memoryService?: MemoryService,
-  variableManager?: VariableManager,
-  reporter?: Reporter,
-  eventBus?: EventBus,
-  summarizer?: ITaskSummarizer  // Add this parameter
+  private planner: ITaskPlanner,
+  private executor: ITaskExecutor,
+  private evaluator: ITaskEvaluator,
+  private eventBus: EnhancedEventBusInterface,
+  private browser: Browser,
+  private domService: DomService,
+  private reporter: AgentReporter,
+  private config: WorkflowManagerConfig = {}
 ) {
   // ... existing code ...
-  this.summarizer = summarizer;
+  this.summarizer = config.summarizer;
 }
 ```
 
@@ -609,19 +588,7 @@ private async buildWorkflowResult(): Promise<WorkflowResult> {
     id: `workflow-${Date.now()}`,
     goal: this.currentStrategy?.goal || '',
     status: successCount === totalSteps ? 'success' : 'partial' as any,
-    completedTasks: Array.from(this.completedSteps.keys()),
-    completedSteps: Array.from(this.completedSteps.values()).map(result => ({
-      id: result.stepId,
-      name: result.stepId,
-      description: `Completed step: ${result.stepId}`,
-      intent: 'completed' as any,
-      targetConcept: 'completed',
-      inputData: null,
-      expectedOutcome: 'completed',
-      dependencies: [],
-      maxAttempts: 1,
-      priority: 1
-    })),
+    completedSteps: Array.from(this.completedSteps.values()),
     failedTasks: Array.from(this.completedSteps.values())
       .filter(r => !r.success)
       .map(r => r.stepId),
@@ -656,10 +623,10 @@ private async buildWorkflowResult(): Promise<WorkflowResult> {
         // Override the basic summary with the AI-generated one
         summary: structuredSummary.summary,
         // Add clean data alongside raw data
-        cleanData: structuredSummary.keyFindings
+        cleanData: structuredSummary.extractedFields
       };
     } catch (error) {
-      this.reporter?.log(`⚠️ Summarizer failed, using basic result: ${error}`);
+      this.reporter.log(`⚠️ Summarizer failed, using basic result: ${error}`);
       // Fall back to base result if summarizer fails
       return baseResult;
     }
@@ -692,105 +659,31 @@ Update the initialization to include the summarizer:
 // In the initMultiAgent function, add:
 
 // Create the summarizer if configured
-const summarizer = config.useSummarizer !== false ? 
-  AgentFactory.createSummarizer({
+const summarizer = AgentFactory.createSummarizer({
     llm,
     model: config.models?.summarizer || 'gpt-4o-mini',
     maxRetries: config.maxRetries || 3,
-    cleanExtractedData: true,
-    includeRecommendations: true
-  }) : undefined;
+    includeRecommendations: true,
+    maxSummaryLength: 500
+  });
 
 // Pass it to WorkflowManager
 const workflowManager = new WorkflowManager(
   planner,
   executor,
   evaluator,
-  errorHandler,
-  browser,
-  stateManager,
-  memoryService,
-  variableManager,
-  reporter,
   eventBus,
-  summarizer  // Add this
-);
-```
-
-## Testing Guide
-
-### Unit Tests
-
-Create test file: `src/core/agents/task-summarizer/__tests__/task-summarizer.test.ts`
-
-```typescript
-import { TaskSummarizerAgent } from '../task-summarizer';
-import { SummarizerInput } from '../../../interfaces/agent.interface';
-
-describe('TaskSummarizerAgent', () => {
-  let summarizer: TaskSummarizerAgent;
-  
-  beforeEach(() => {
-    const mockLLM = {
-      invokeAndParse: jest.fn().mockResolvedValue({
-        summary: 'Test summary',
-        keyFindings: [],
-        performanceMetrics: {}
-      })
-    };
-    
-    summarizer = new TaskSummarizerAgent(mockLLM as any, {
-      model: 'gpt-4o-mini',
-      maxRetries: 3
-    });
-  });
-  
-  test('should clean CSS from extracted data', async () => {
-    const input: SummarizerInput = {
-      goal: 'Extract product price',
-      plan: [],
-      completedSteps: [],
-      extractedData: {
-        price: '.savingPriceOverride { color:#CC0C39!important; } $229.00'
-      },
-      totalDuration: 1000,
-      startTime: new Date(),
-      endTime: new Date()
-    };
-    
-    const result = await summarizer.execute(input);
-    expect(result).toBeDefined();
-    expect(result.status).toBeDefined();
-  });
-  
-  test('should format duration correctly', () => {
-    // Test the private formatDuration method indirectly through execute
-    // Add more tests here
-  });
-});
-```
-
-### Integration Tests
-
-Test with actual workflow results:
-
-```typescript
-// In agent-amazon-multi.ts, add:
-
-const workflow = initMultiAgent({
-  // ... existing config ...
-  useSummarizer: true,  // Enable summarizer
-  models: {
-    // ... existing models ...
-    summarizer: 'gpt-4o-mini'
+  browser,
+  domService,
+  reporter,
+  {
+    maxRetries: config.maxRetries || 3,
+    timeout: config.timeout,
+    enableReplanning: true,
+    variableManager,
+    summarizer  // Add the summarizer to config
   }
-});
-
-const result = await workflow.executeWorkflow(goal);
-
-// The result should now include structuredSummary
-console.log('Structured Summary:', result.structuredSummary);
-console.log('Clean Data:', result.cleanData);
+);
 ```
 
 ## Configuration Options
@@ -799,17 +692,12 @@ Add to your workflow configuration:
 
 ```typescript
 {
-  useSummarizer: true,              // Enable/disable summarizer
   models: {
     summarizer: 'gpt-4o-mini'       // Model to use for summarization
   },
   summarizerConfig: {
-    cleanExtractedData: true,       // Clean HTML/CSS from data
     includeRecommendations: true,   // Generate optimization tips
-    maxSummaryLength: 500,          // Max chars for summary
-    extractPricePatterns: [         // Custom price patterns
-      /€[\d,]+\.?\d*/               // Euro prices
-    ]
+    maxSummaryLength: 500           // Max chars for summary
   }
 }
 ```
@@ -819,17 +707,17 @@ Add to your workflow configuration:
 ### Common Issues
 
 1. **Summarizer not being invoked**
-   - Check that `useSummarizer` is not set to `false`
    - Verify the summarizer is passed to WorkflowManager
 
 2. **Data still contains CSS/HTML**
-   - Ensure `cleanExtractedData` is set to `true`
-   - Check that the pre-cleaning logic is working
-   - May need to add more cleaning patterns
+   - Check that the LLM prompt includes clear instructions for cleaning
+   - Verify the model is capable of handling HTML/CSS extraction
+   - Consider using a more powerful model if needed
 
-3. **Price extraction failing**
-   - Add custom price patterns for your use case
+3. **Data extraction failing**
+   - Add custom extraction patterns for your use case
    - Check the regex patterns match your data format
+   - Verify field names trigger the correct extraction logic
 
 4. **LLM response not matching expected format**
    - Review the prompt to ensure clarity
@@ -840,9 +728,7 @@ Add to your workflow configuration:
 
 1. **Always validate input and output** - Use the validation methods to ensure data integrity
 2. **Provide fallbacks** - If the LLM fails, have default summaries ready
-3. **Clean incrementally** - Pre-clean data before sending to LLM to reduce token usage
-4. **Log failures** - Always log when summarization fails but don't break the workflow
-5. **Test with real data** - Use actual workflow outputs to test cleaning logic
+3. **Log failures** - Always log when summarization fails but don't break the workflow
 
 ## Future Enhancements
 

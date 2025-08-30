@@ -22,4 +22,9 @@ export interface Browser {
   goToUrl(url: string): Promise<void>;
   goBack(): Promise<void>;
   extractContent(): Promise<string>;
+  clearInput(coordinates: Coordinates): Promise<void>;
+  hover(coordinates: Coordinates): Promise<void>;
+  selectOption(coordinates: Coordinates, options: string[]): Promise<void>;
+  waitForElement(selector: string, condition: string, timeout?: number): Promise<void>;
+  drag(startCoordinates: Coordinates, endCoordinates: Coordinates): Promise<void>;
 }

@@ -12,6 +12,7 @@ import {
   WorkflowResult,
   ReplanContext,
 } from '../types/agent-types';
+import { ITaskSummarizer, SummarizerInput } from '../interfaces/agent.interface';
 import { EnhancedEventBusInterface } from '../interfaces/event-bus.interface';
 import { Browser } from '../interfaces/browser.interface';
 import { DomService } from '@/infra/services/dom-service';
@@ -26,6 +27,7 @@ export interface WorkflowManagerConfig {
   timeout?: number;
   enableReplanning?: boolean;
   variableManager?: VariableManager;
+  summarizer?: ITaskSummarizer;
 }
 
 /**
@@ -76,6 +78,8 @@ export class WorkflowManager {
   private stateManager: StateManager;
   private memoryService: MemoryService;
   private variableManager: VariableManager;
+  private summarizer?: ITaskSummarizer;
+  private errors: string[] = [];
 
   constructor(
     private planner: ITaskPlanner,
@@ -96,6 +100,9 @@ export class WorkflowManager {
     this.stateManager = new StateManager(browser, domService);
     this.memoryService = new MemoryService(this.eventBus);
     this.variableManager = config.variableManager || new VariableManager();
+    if (config.summarizer) {
+      this.summarizer = config.summarizer;
+    }
   }
 
   async executeWorkflow(goal: string, startUrl?: string): Promise<WorkflowResult> {
@@ -178,7 +185,7 @@ export class WorkflowManager {
         }
       }
       
-      return this.buildWorkflowResult();
+      return await this.buildWorkflowResult();
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -323,6 +330,8 @@ export class WorkflowManager {
       return stepResult;
       
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.errors.push(`Step ${step.id}: ${errorMessage}`);
       const stepResult: StepResult = {
         stepId: step.id,
         success: false,
@@ -347,7 +356,7 @@ export class WorkflowManager {
   }
 
 
-  private buildWorkflowResult(): WorkflowResult {
+  private async buildWorkflowResult(): Promise<WorkflowResult> {
     const endTime = new Date();
     const duration = this.startTime ? endTime.getTime() - this.startTime.getTime() : 0;
     
@@ -356,10 +365,11 @@ export class WorkflowManager {
     
     const totalSteps = this.completedSteps.size;
     
-    return {
+    // Base result object
+    const baseResult = {
       id: `workflow-${Date.now()}`,
       goal: this.currentStrategy?.goal || '',
-      status: successCount === totalSteps ? 'success' : 'partial',
+      status: successCount === totalSteps ? 'success' : 'partial' as any,
       completedTasks: Array.from(this.completedSteps.keys()),
       completedSteps: Array.from(this.completedSteps.values()).map(result => ({
         id: result.stepId,
@@ -381,6 +391,37 @@ export class WorkflowManager {
       extractedData: this.extractedData,
       summary: `Workflow completed with ${successCount}/${totalSteps} successful steps`
     };
+    
+    // If summarizer is available, enhance the result
+    if (this.summarizer) {
+      try {
+        const summarizerInput: SummarizerInput = {
+          goal: this.currentStrategy?.goal || '',
+          plan: this.currentStrategy?.steps || [],
+          completedSteps: Array.from(this.completedSteps.values()),
+          extractedData: this.extractedData,
+          totalDuration: duration,
+          startTime: this.startTime || new Date(),
+          endTime: endTime,
+          errors: this.errors,
+          url: this.browser.getPage().url()
+        };
+        
+        const structuredSummary = await this.summarizer.execute(summarizerInput);
+        
+        return {
+          ...baseResult,
+          structuredSummary,
+          summary: structuredSummary.summary,
+          cleanData: structuredSummary.extractedFields
+        };
+      } catch (error) {
+        this.reporter.log(`⚠️ Summarizer failed, using basic result: ${error}`);
+        return baseResult;
+      }
+    }
+    
+    return baseResult;
   }
 
   private emitWorkflowEvent(event: keyof import('../interfaces/event-bus.interface').AppEvents, data: any): void {
