@@ -28,6 +28,12 @@ export interface WorkflowManagerConfig {
   enableReplanning?: boolean;
   variableManager?: VariableManager;
   summarizer?: ITaskSummarizer;
+  maxReplansPerStep?: number;      // Max replans per individual step
+  maxTotalReplans?: number;         // Max replans for entire workflow
+  enableDegradation?: boolean;      // Allow degraded success
+  allowEarlyExit?: boolean;           // Can workflow exit with partial results?
+  minAcceptableCompletion?: number;   // Minimum % completion to exit early (default 60)
+  criticalSteps?: string[];           // Step IDs that must complete
 }
 
 /**
@@ -80,6 +86,10 @@ export class WorkflowManager {
   private variableManager: VariableManager;
   private summarizer?: ITaskSummarizer;
   private errors: string[] = [];
+  
+  private replanAttemptsPerStep: Map<string, number> = new Map();
+  private failedApproaches: Map<string, string[]> = new Map();
+  private maxReplansPerStep: number = 3; // Configurable limit
 
   constructor(
     private planner: ITaskPlanner,
@@ -95,8 +105,14 @@ export class WorkflowManager {
       maxRetries: 3,
       timeout: 300000,
       enableReplanning: true,
+      maxReplansPerStep: 3,
+      enableDegradation: true,
+      allowEarlyExit: false,  // Opt-in for early exit
+      minAcceptableCompletion: 60,
+      criticalSteps: [],
       ...config
     };
+    this.maxReplansPerStep = this.config.maxReplansPerStep || 3;
     this.stateManager = new StateManager(browser, domService);
     this.memoryService = new MemoryService(this.eventBus);
     this.variableManager = config.variableManager || new VariableManager();
@@ -132,7 +148,7 @@ export class WorkflowManager {
       
       const plannerOutput = await this.planner.execute(plannerInput);
 
-      this.reporter.log(`🔍 Planner output: ${JSON.stringify(sanitizeForLogging(plannerOutput))}`);
+      this.reporter.log(`🔍 Planner output: ${JSON.stringify(sanitizeForLogging(plannerOutput), null, 2)}`);
       this.currentStrategy = {
         id: plannerOutput.id,
         goal: plannerOutput.goal,
@@ -152,18 +168,96 @@ export class WorkflowManager {
         
         if (result.success) {
           successfullyCompletedSteps.push(strategicStep);
+          
+          // Check if we should exit early with partial results
+          if (this.config.allowEarlyExit) {
+            const completion = this.calculateCompletionPercentage();
+            const criticalStepsComplete = this.checkCriticalSteps();
+            
+            if (completion >= (this.config.minAcceptableCompletion || 60) && criticalStepsComplete) {
+              this.reporter.log(`✅ Achieved ${completion.toFixed(1)}% completion with critical steps done. Exiting with partial success.`);
+              break;
+            }
+          }
         } else {
+          // Record failure learning when a step fails
+          const beforeState = await this.captureSemanticState();
+          const context: MemoryContext = {
+            url: this.browser.getPageUrl(),
+            taskGoal: strategicStep.description,
+            pageSection: beforeState.visibleSections[0]
+          };
+          
+          // Record what failed for future reference
+          this.memoryService.addLearning(
+            context,
+            `Task "${strategicStep.description}" failed: ${result.errorReason}`,
+            {
+              actionToAvoid: strategicStep.description,
+              alternativeAction: 'Try different approach or selector',
+              confidence: 0.8
+            }
+          );
+          
           if (this.config.enableReplanning) {
-            this.reporter.log(`⚠️ Step failed, requesting replan...`);
+            const stepId = strategicStep.id;
+            const replanCount = this.replanAttemptsPerStep.get(stepId) || 0;
+            
+            // Check replan limit
+            if (replanCount >= this.maxReplansPerStep) {
+              this.reporter.log(`⛔ Step ${stepId} has reached max replan limit (${this.maxReplansPerStep})`);
+              
+              // Try degradation strategy if enabled
+              if (this.config.enableDegradation) {
+                this.reporter.log(`📉 Attempting degraded completion...`);
+                // Mark as partial success and continue
+                this.completedSteps.set(stepId, {
+                  ...result,
+                  status: 'partial',
+                  degraded: true
+                });
+                successfullyCompletedSteps.push(strategicStep);
+                continue; // Move to next step instead of replanning
+              } else {
+                break; // Stop workflow
+              }
+            }
+            
+            // Track replan attempt
+            this.replanAttemptsPerStep.set(stepId, replanCount + 1);
+            
+            // Track failed approach to avoid repetition
+            const failedApproach = JSON.stringify({
+              approach: strategicStep.description,
+              reason: result.errorReason
+            });
+            
+            if (!this.failedApproaches.has(stepId)) {
+              this.failedApproaches.set(stepId, []);
+            }
+            this.failedApproaches.get(stepId)!.push(failedApproach);
+            
+            this.reporter.log(`⚠️ Step failed (attempt ${replanCount + 1}/${this.maxReplansPerStep}), requesting replan...`);
             
             // Replan from current state when a step fails
             // Pass successfully completed steps, not just slice by index
+            const currentState = await this.captureSemanticState();
+            const memoryContext: MemoryContext = {
+              url: this.browser.getPageUrl(),
+              taskGoal: strategicStep.description,
+              pageSection: currentState.visibleSections[0]
+            };
+            
             const replanContext: ReplanContext = {
               originalGoal: goal,
               completedSteps: successfullyCompletedSteps,
               failedStep: strategicStep,
               failureReason: result.errorReason || 'Step execution failed',
-              currentState: await this.captureSemanticState()
+              currentState: currentState,
+              accumulatedData: this.stateManager.getAllExtractedData(),
+              failedApproaches: this.failedApproaches.get(strategicStep.id) || [],
+              attemptNumber: replanCount + 1,
+              memoryLearnings: this.memoryService.getMemoryPrompt(memoryContext)
             };
             
             const replanOutput = await this.planner.replan(replanContext);
@@ -241,10 +335,11 @@ export class WorkflowManager {
         // Use the executor's state which contains extracted data
         afterState = execution.finalState;
         
-        // Also update StateManager with the extracted data
-        for (const [key, value] of Object.entries(execution.finalState.extractedData)) {
-          this.stateManager.addExtractedData(key, value);
-        }
+        // Merge instead of individual adds to ensure persistence
+        this.stateManager.mergeExtractedData(execution.finalState.extractedData);
+        
+        // Create checkpoint after successful extraction
+        this.stateManager.createCheckpoint(`step_${step.id}_complete`);
         
         this.reporter.log(`📊 Using extracted data from executor: ${JSON.stringify(truncateExtractedData(execution.finalState.extractedData))}`);
       } else {
@@ -252,10 +347,12 @@ export class WorkflowManager {
         afterState = await this.captureSemanticState();
       }
       
-      // Merge any extracted data from the executor into our workflow's extracted data
-      if (afterState.extractedData && Object.keys(afterState.extractedData).length > 0) {
-        this.extractedData = { ...this.extractedData, ...afterState.extractedData };
-        this.reporter.log(`📊 Extracted data: ${JSON.stringify(truncateExtractedData(afterState.extractedData))}`);
+      // Update workflow extractedData with merged data from StateManager
+      this.extractedData = this.stateManager.getAllExtractedData();
+      
+      // Log the accumulated data
+      if (Object.keys(this.extractedData).length > 0) {
+        this.reporter.log(`📊 Accumulated extracted data: ${JSON.stringify(truncateExtractedData(this.extractedData))}`);
       }
       
       // MODIFIED: Pass screenshots to evaluator
@@ -360,16 +457,30 @@ export class WorkflowManager {
     const endTime = new Date();
     const duration = this.startTime ? endTime.getTime() - this.startTime.getTime() : 0;
     
-    const successCount = Array.from(this.completedSteps.values())
-      .filter(step => step.status === 'success').length;
+    // Calculate completion percentage
+    const totalSteps = this.currentStrategy?.steps.length || 0;
+    const completedCount = Array.from(this.completedSteps.values())
+      .filter(r => r.success || r.status === 'partial').length;
+    const completionPercentage = totalSteps > 0 ? (completedCount / totalSteps) * 100 : 0;
     
-    const totalSteps = this.completedSteps.size;
+    // Determine overall status
+    let status: WorkflowResult['status'] = 'failure';
+    if (completionPercentage === 100) {
+      status = 'success';
+    } else if (completionPercentage >= 70) {
+      status = 'partial';
+    } else if (completionPercentage >= 40) {
+      status = 'degraded';
+    }
+    
+    // Get all accumulated data
+    const allExtractedData = this.stateManager.getAllExtractedData();
     
     // Base result object
     const baseResult = {
       id: `workflow-${Date.now()}`,
       goal: this.currentStrategy?.goal || '',
-      status: successCount === totalSteps ? 'success' : 'partial' as any,
+      status,
       completedTasks: Array.from(this.completedSteps.keys()),
       completedSteps: Array.from(this.completedSteps.values()).map(result => ({
         id: result.stepId,
@@ -388,8 +499,17 @@ export class WorkflowManager {
       duration,
       startTime: this.startTime || new Date(),
       endTime: endTime,
-      extractedData: this.extractedData,
-      summary: `Workflow completed with ${successCount}/${totalSteps} successful steps`
+      extractedData: allExtractedData,
+      summary: `Workflow completed with ${completedCount}/${totalSteps} successful steps (${completionPercentage.toFixed(1)}%)`,
+      errors: this.errors,
+      // NEW: Phase 5 - Progressive completion fields
+      completionPercentage: Number(completionPercentage.toFixed(1)),
+      partialResults: this.extractedData,
+      degradedSteps: Array.from(this.completedSteps.entries())
+        .filter(([_, r]) => r.degraded)
+        .map(([id, _]) => id),
+      bestEffortData: allExtractedData,
+      confidenceScore: this.calculateOverallConfidence()
     };
     
     // If summarizer is available, enhance the result
@@ -399,7 +519,7 @@ export class WorkflowManager {
           goal: this.currentStrategy?.goal || '',
           plan: this.currentStrategy?.steps || [],
           completedSteps: Array.from(this.completedSteps.values()),
-          extractedData: this.extractedData,
+          extractedData: allExtractedData,
           totalDuration: duration,
           startTime: this.startTime || new Date(),
           endTime: endTime,
@@ -422,6 +542,34 @@ export class WorkflowManager {
     }
     
     return baseResult;
+  }
+
+  private calculateOverallConfidence(): number {
+    const results = Array.from(this.completedSteps.values());
+    if (results.length === 0) return 0;
+    
+    const avgConfidence = results
+      .map(r => (r as any).confidence || 0.5)
+      .reduce((a, b) => a + b, 0) / results.length;
+      
+    return Number(avgConfidence.toFixed(2));
+  }
+
+  private calculateCompletionPercentage(): number {
+    const totalSteps = this.currentStrategy?.steps.length || 0;
+    const completedCount = Array.from(this.completedSteps.values())
+      .filter(r => r.success || r.status === 'partial').length;
+    return totalSteps > 0 ? (completedCount / totalSteps) * 100 : 0;
+  }
+
+  private checkCriticalSteps(): boolean {
+    const criticalSteps = this.config.criticalSteps || [];
+    if (criticalSteps.length === 0) return true; // No critical steps defined
+    
+    return criticalSteps.every(stepId => {
+      const stepResult = this.completedSteps.get(stepId);
+      return stepResult && (stepResult.success || stepResult.status === 'partial');
+    });
   }
 
   private emitWorkflowEvent(event: keyof import('../interfaces/event-bus.interface').AppEvents, data: any): void {

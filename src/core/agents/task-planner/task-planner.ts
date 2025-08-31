@@ -157,6 +157,16 @@ Your response must be valid JSON in the format specified in the system prompt.
       ? context.completedSteps.map(step => `✅ ${step.description}`).join('\n')
       : 'None completed yet';
 
+    const failedApproachesText = context.failedApproaches && context.failedApproaches.length > 0
+      ? context.failedApproaches.map((approach, i) => `❌ ${i + 1}. ${approach}`).join('\n')
+      : 'No previous failed approaches recorded';
+
+    const accumulatedDataText = context.accumulatedData && Object.keys(context.accumulatedData).length > 0
+      ? Object.entries(context.accumulatedData).map(([key, value]) => `  - ${key}: ${value}`).join('\n')
+      : 'No data extracted yet';
+
+    const memoryLearningsText = context.memoryLearnings || 'No previous learnings for this context.';
+
     return `
 REPLANNING REQUEST:
 
@@ -168,14 +178,38 @@ CURRENT SITUATION:
 - Current Page: ${context.currentState.url}
 - Page Sections Available: ${context.currentState.visibleSections.join(', ')}
 - Available Actions: ${context.currentState.availableActions.join(', ')}
+${context.attemptNumber ? `- Attempt Number: ${context.attemptNumber}` : ''}
 
 COMPLETED STEPS (TRY NOT TO REPEAT THESE UNLESS NECESSARY):
 ${completedStepsText}
 
-Based on what has been completed and the current page state, create a CONTINUATION plan with only the remaining steps needed to achieve the original goal.
-Do NOT repeat steps that have already been successfully completed unless you deem it absolutely necessary.
-Start from where we are now, not from the beginning.
-The plan should work with the current page state and available functionality.
+ACCUMULATED DATA (PRESERVE THIS INFORMATION):
+${accumulatedDataText}
+
+FAILED APPROACHES (DO NOT REPEAT THESE):
+${failedApproachesText}
+
+## Learning from Failures
+
+${memoryLearningsText}
+
+When replanning, you MUST:
+1. Review the failed approaches list and memory learnings above
+2. DO NOT repeat any approach that has already failed
+3. Try alternative strategies:
+   - Different UI elements or selectors
+   - Different navigation paths
+   - Different interaction methods
+   - Simplified goals if original is unachievable
+
+Based on what has been completed, failed attempts, and memory learnings, create a CONTINUATION plan with only the remaining steps needed to achieve the original goal.
+IMPORTANT: 
+- Do NOT repeat steps that have already been successfully completed unless absolutely necessary
+- Do NOT repeat any approaches that have already failed (check both failed approaches and memory learnings)
+- PRESERVE all accumulated data - build upon what has already been extracted
+- Start from where we are now, not from the beginning
+- The plan should work with the current page state and available functionality
+- Learn from the memory learnings to avoid known problematic patterns
 
 Your response must be valid JSON in the format specified in the system prompt.
     `;

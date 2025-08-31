@@ -7,6 +7,8 @@ export class StateManager {
   private stateHistory: PageState[] = [];
   private currentState: PageState | null = null;
   private extractedData: Map<string, any> = new Map();
+  private persistentData: Map<string, any> = new Map();
+  private checkpoints: Map<string, PageState> = new Map();
 
   constructor(
     private browser: Browser,
@@ -298,8 +300,11 @@ export class StateManager {
   }
 
   addExtractedData(key: string, value: any): void {
-    this.extractedData.set(key, value);
-    console.log(`📝 Added extracted data - ${key}: ${truncateForLogging(value, 100)}`);
+    if (value !== null && value !== undefined && value !== '') {
+      this.extractedData.set(key, value);
+      this.persistentData.set(key, value);
+      console.log(`📝 Added extracted data - ${key}: ${truncateForLogging(value, 100)}`);
+    }
   }
 
   /**
@@ -308,8 +313,11 @@ export class StateManager {
    */
   mergeExtractedData(data: Record<string, any>): void {
     for (const [key, value] of Object.entries(data)) {
-      this.extractedData.set(key, value);
-      console.log(`📝 Merged extracted data - ${key}: ${truncateForLogging(value, 100)}`);
+      if (value !== null && value !== undefined && value !== '') {
+        this.extractedData.set(key, value);
+        this.persistentData.set(key, value);
+        console.log(`📝 Merged extracted data - ${key}: ${truncateForLogging(value, 100)}`);
+      }
     }
   }
 
@@ -321,7 +329,6 @@ export class StateManager {
     // First merge the data
     this.mergeExtractedData(extractedData);
     
-    // Then capture the state normally
     return this.captureState();
   }
 
@@ -330,7 +337,52 @@ export class StateManager {
   }
 
   getAllExtractedData(): Record<string, any> {
-    return Object.fromEntries(this.extractedData);
+    return {
+      ...Object.fromEntries(this.persistentData),
+      ...Object.fromEntries(this.extractedData)
+    };
+  }
+
+  /**
+   * Create checkpoint to save current state and data
+   * Used for rollback and recovery during replanning
+   */
+  createCheckpoint(name: string): void {
+    if (this.currentState) {
+      this.checkpoints.set(name, {  
+        ...this.currentState,
+        extractedData: this.getAllExtractedData()
+      });
+      console.log(`💾 Created checkpoint: ${name}`);
+    }
+  }
+
+  /**
+   * Get a specific checkpoint
+   */
+  getCheckpoint(name: string): PageState | undefined {
+    return this.checkpoints.get(name);
+  }
+
+  /**
+   * List all available checkpoints
+   */
+  getCheckpointNames(): string[] {
+    return Array.from(this.checkpoints.keys());
+  }
+
+  /**
+   * Clear old checkpoints to manage memory
+   */
+  clearOldCheckpoints(keepLast: number = 5): void {
+    const names = this.getCheckpointNames();
+    if (names.length > keepLast) {
+      const toRemove = names.slice(0, names.length - keepLast);
+      toRemove.forEach(name => {
+        this.checkpoints.delete(name);
+        console.log(`🗑️ Removed old checkpoint: ${name}`);
+      });
+    }
   }
 
   getStateHistory(): PageState[] {
@@ -353,5 +405,22 @@ export class StateManager {
 
   clearExtractedData(): void {
     this.extractedData.clear();
+  }
+
+  /**
+   * Clear all persistent data (use with caution)
+   */
+  clearPersistentData(): void {
+    this.persistentData.clear();
+    console.log(`🗑️ Cleared persistent data`);
+  }
+
+  /**
+   * Clear both current and persistent data completely
+   */
+  clearAllExtractedData(): void {
+    this.extractedData.clear();
+    this.persistentData.clear();
+    console.log(`🗑️ Cleared all extracted data (current + persistent)`);
   }
 }

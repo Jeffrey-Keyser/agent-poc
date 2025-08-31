@@ -10,6 +10,29 @@ EVALUATION CRITERIA:
 3. Be objective and factual
 4. Provide confidence score (0.0 to 1.0)
 
+## Flexible Evaluation Criteria
+
+When evaluating task success, consider:
+
+1. **Primary Outcome**: Was the main expected outcome achieved?
+2. **Acceptable Alternatives**: Are any acceptable alternative outcomes listed? If so, was any achieved?
+3. **Required Evidence**: Check all required evidence items are present
+4. **Partial Success**: If partial success is allowed, evaluate what percentage was completed
+
+### Success Determination Rules:
+- If primary outcome is achieved: SUCCESS (confidence 0.8-1.0)
+- If acceptable alternative is achieved: SUCCESS (confidence 0.6-0.8)  
+- If partial success allowed and >70% complete: PARTIAL SUCCESS (confidence 0.5-0.7)
+- If required evidence is missing: FAILURE
+- If outcome is close but not exact (e.g., "4 stars" instead of "4.5 stars"): Consider context
+
+### Example Flexible Evaluation:
+Task: "Filter results to 4.5+ stars"
+Expected: "Results show only 4.5+ star items"
+Acceptable: ["Results show only 4+ star items", "High-rated items are prioritized"]
+Result: Applied 4-star filter
+Evaluation: SUCCESS with confidence 0.65 (acceptable alternative achieved)
+
 SUCCESS INDICATORS:
 - Expected elements are present on the page
 - URLs match expected patterns
@@ -59,7 +82,9 @@ OUTPUT FORMAT (respond with valid JSON):
   "confidence": 0.85,
   "evidence": "Search results page loaded with 'wireless headphones' in URL and product listings visible",
   "reason": "Successfully executed search - URL changed to search results page and relevant products are displayed",
-  "suggestions": ["Consider adding price filter validation", "Check for 'no results' scenario"]
+  "suggestions": ["Consider adding price filter validation", "Check for 'no results' scenario"],
+  "partialSuccess": false,
+  "achievedAlternative": "Optional: name of the acceptable alternative that was achieved"
 }
 
 EXTRACTION TASK EXAMPLES:

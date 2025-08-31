@@ -71,6 +71,8 @@ export interface EvaluatorOutput {
   evidence: string;
   reason: string;
   suggestions: string[];
+  partialSuccess?: boolean;
+  achievedAlternative?: string;
 }
 
 export interface ReplanContext {
@@ -79,6 +81,10 @@ export interface ReplanContext {
   failedStep: StrategicTask;
   failureReason: string;
   currentState: PageState;
+  accumulatedData?: Record<string, any>;
+  failedApproaches?: string[];
+  attemptNumber?: number;
+  memoryLearnings?: string; // Memory learnings to avoid repeated mistakes
 }
 
 export interface ITaskPlanner extends IAgent<PlannerInput, PlannerOutput> {

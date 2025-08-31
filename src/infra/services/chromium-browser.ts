@@ -48,12 +48,12 @@ export class ChromiumBrowser implements Browser {
 
     this.context = await browser.newContext({
       screen: {
-        width: 1440,
-        height: 900,
+        width: 1820,
+        height: 1024,
       },
       viewport: {
-        width: 1440,
-        height: 900,
+        width: 1820,
+        height: 1024,
       },
     });
     this.page = await this.context.newPage();

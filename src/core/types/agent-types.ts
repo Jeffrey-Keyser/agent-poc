@@ -10,6 +10,11 @@ export interface StrategicTask {
   dependencies: string[];
   maxAttempts: number;
   priority: number;
+  acceptableOutcomes?: string[];     // Alternative acceptable outcomes
+  requiredEvidence?: string[];       // Must-have evidence for success
+  optionalEvidence?: string[];       // Nice-to-have evidence
+  minSuccessConfidence?: number;     // Minimum confidence for success (default 0.7)
+  allowPartialSuccess?: boolean;     // Can this step succeed partially?
 }
 
 // Tactical level - what the Executor creates at runtime
@@ -51,6 +56,7 @@ export interface StepResult {
   errorReason?: string;
   duration: number;
   attempts: number;
+  degraded?: boolean;
 }
 
 export interface PageState {
@@ -147,7 +153,7 @@ export interface TaskEvent {
 export interface WorkflowResult {
   id: string;
   goal: string;
-  status: 'success' | 'failure' | 'partial';
+  status: 'success' | 'failure' | 'partial' | 'degraded';
   completedTasks: string[];
   completedSteps: StrategicTask[]; // Added for compatibility with workflow-manager
   failedTasks: string[];
@@ -161,6 +167,11 @@ export interface WorkflowResult {
   errors?: string[]; // Added for compatibility with migration-service
   structuredSummary?: any;  // SummarizerOutput from agent.interface
   cleanData?: any;           // Cleaned extracted fields
+  completionPercentage: number;
+  partialResults?: any;
+  degradedSteps?: string[];
+  bestEffortData?: any;
+  confidenceScore: number;
 }
 
 // Multi-agent system configuration

@@ -75,6 +75,8 @@ export class TaskEvaluatorAgent implements ITaskEvaluator {
       evidence: string;
       reason: string;
       suggestions?: string[];
+      partialSuccess?: boolean;
+      achievedAlternative?: string;
     }>();
 
     const evaluation = await this.llm.invokeAndParse(messages, parser);
@@ -87,6 +89,24 @@ export class TaskEvaluatorAgent implements ITaskEvaluator {
       reason: evaluation.reason || 'No reason provided',
       suggestions: evaluation.suggestions || []
     };
+
+    // NEW: Add optional fields only if they have values
+    if (evaluation.partialSuccess !== undefined) {
+      output.partialSuccess = evaluation.partialSuccess;
+    }
+    if (evaluation.achievedAlternative !== undefined) {
+      output.achievedAlternative = evaluation.achievedAlternative;
+    }
+
+    // NEW: Apply flexible success criteria
+    if (!output.success && input.step.allowPartialSuccess) {
+      // Check if we have enough for partial success
+      if (output.confidence >= (input.step.minSuccessConfidence || 0.5)) {
+        output.success = true;
+        output.partialSuccess = true;
+        output.reason = `Partial success: ${output.reason}`;
+      }
+    }
 
     if (!this.validateOutput(output)) {
       throw new Error('Generated invalid evaluator output');
@@ -142,6 +162,9 @@ IMPORTANT: This is an EXTRACTION task. Success is determined by:
 Extracted Data Present: ${afterState.extractedData && Object.keys(afterState.extractedData).length > 0 ? 'YES' : 'NO'}
 ` : '';
 
+    // NEW: Flexible evaluation criteria
+    const flexibleCriteria = this.buildFlexibleCriteria(step);
+
     return `
 STRATEGIC TASK EVALUATION:
 
@@ -151,6 +174,7 @@ TASK DETAILS:
 - Target Concept: ${step.targetConcept}
 - Expected Outcome: ${step.expectedOutcome}
 - Input Data: ${JSON.stringify(step.inputData)}
+${flexibleCriteria}
 ${extractionGuidance}
 EXECUTION RESULTS:
 ${microActionsText}
@@ -168,6 +192,34 @@ ${step.intent === 'extract' ? 'For extraction tasks: If meaningful data was extr
 
 Your response must be valid JSON in the specified format.
     `;
+  }
+
+  private buildFlexibleCriteria(step: any): string {
+    let criteria = '';
+
+    if (step.acceptableOutcomes?.length > 0) {
+      criteria += `\nACCEPTABLE ALTERNATIVES:
+${step.acceptableOutcomes.map((outcome: string) => `- ${outcome}`).join('\n')}`;
+    }
+
+    if (step.requiredEvidence?.length > 0) {
+      criteria += `\nREQUIRED EVIDENCE (must be present for success):
+${step.requiredEvidence.map((evidence: string) => `- ${evidence}`).join('\n')}`;
+    }
+
+    if (step.optionalEvidence?.length > 0) {
+      criteria += `\nOPTIONAL EVIDENCE (nice to have):
+${step.optionalEvidence.map((evidence: string) => `- ${evidence}`).join('\n')}`;
+    }
+
+    if (step.allowPartialSuccess) {
+      const minConfidence = step.minSuccessConfidence || 0.5;
+      criteria += `\nPARTIAL SUCCESS ALLOWED:
+- Minimum confidence threshold: ${minConfidence}
+- Can succeed with partial completion if confidence >= ${minConfidence}`;
+    }
+
+    return criteria;
   }
 
   private buildStateComparison(beforeState: any, afterState: any): string {

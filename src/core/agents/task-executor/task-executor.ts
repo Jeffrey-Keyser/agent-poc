@@ -241,7 +241,6 @@ Use the element indices from the DOM state above.
       switch (action.type) {
         case 'click':
           if (action.elementIndex !== undefined) {
-            // Use domService.getIndexSelector like the legacy system
             const coordinates = this.domService.getIndexSelector(action.elementIndex);
             if (coordinates) {
               await this.domService.resetHighlightElements();
@@ -257,7 +256,6 @@ Use the element indices from the DOM state above.
 
         case 'fill':
           if (action.elementIndex !== undefined && action.value) {
-            // Use domService.getIndexSelector like the legacy system
             const coordinates = this.domService.getIndexSelector(action.elementIndex);
             if (coordinates) {
               await this.domService.highlightElementPointer(coordinates);

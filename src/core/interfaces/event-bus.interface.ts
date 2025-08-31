@@ -1,10 +1,5 @@
-import { Run } from '../entities/run';
-import { Task, TaskAction } from '../entities/task';
 
 export type AppEvents = {
-  'run:update': Run;
-  'task:update': Task;
-  'action:update': TaskAction;
   'pristine-screenshot:taken': string;
   // Multi-agent workflow events
   'workflow:started': any;
