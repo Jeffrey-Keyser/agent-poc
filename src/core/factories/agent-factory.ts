@@ -2,7 +2,6 @@ import { LLM } from '../interfaces/llm.interface';
 import { Browser } from '../interfaces/browser.interface';
 import { AgentReporter } from '../interfaces/agent-reporter.interface';
 import { EnhancedEventBusInterface } from '../interfaces/event-bus.interface';
-
 import { ITaskPlanner, ITaskExecutor, ITaskEvaluator, ITaskSummarizer } from '../interfaces/agent.interface';
 import { 
   PlannerConfig, 
@@ -10,21 +9,15 @@ import {
   EvaluatorConfig, 
   MultiAgentConfig 
 } from '../types/agent-types';
-
 import { TaskPlannerAgent } from '../agents/task-planner/task-planner';
 import { TaskExecutorAgent } from '../agents/task-executor/task-executor';
 import { TaskEvaluatorAgent } from '../agents/task-evaluator/task-evaluator';
-import { ErrorHandlerAgent } from '../agents/error-handler/error-handler';
 import { TaskSummarizerAgent, SummarizerConfig } from '../agents/task-summarizer';
 import { WorkflowManager } from '../services/workflow-manager';
 import { DomService } from '@/infra/services/dom-service';
-
-// Phase 1-3: Import core service integrations
 import { TaskQueue } from '../services/task-queue';
 import { StateManager } from '../services/state-manager';
 import { WorkflowMonitor } from '../services/workflow-monitor';
-
-// Phase 4: Import infrastructure domain services  
 import { 
   AITaskPlanningService,
   BrowserExecutionService, 
@@ -33,8 +26,6 @@ import {
   ExecutionService, 
   EvaluationService
 } from '../../infrastructure/services';
-
-// Phase 5: Import repository interfaces and implementations
 import {
   WorkflowRepository,
   PlanRepository,
@@ -46,13 +37,6 @@ import {
   InMemoryMemoryRepository
 } from '../../infrastructure/repositories';
 
-// Phase 6: Event handlers support
-import {
-  EventHandlerFactory,
-  WorkflowMetricsHandler,
-  WorkflowLoggingHandler
-} from '../../infrastructure/event-handlers';
-
 /**
  * Factory for creating specialized agents with proper configuration
  * 
@@ -61,7 +45,7 @@ import {
  * to provide clean separation between creation and usage of agents.
  */
 export class AgentFactory {
-  
+
   /**
    * Create a Task Planner Agent configured for strategic planning
    * Uses higher-capability models for complex reasoning tasks
@@ -69,7 +53,7 @@ export class AgentFactory {
   static createPlanner(config: PlannerConfig): ITaskPlanner {
     return new TaskPlannerAgent(config.llm, config);
   }
-  
+
   /**
    * Create a Task Executor Agent configured for tactical execution
    * Uses efficient models for repeated DOM interaction tasks
@@ -90,15 +74,7 @@ export class AgentFactory {
   static createEvaluator(config: EvaluatorConfig): ITaskEvaluator {
     return new TaskEvaluatorAgent(config.llm, config);
   }
-  
-  /**
-   * Create an Error Handler Agent for failure analysis and recovery
-   * Uses efficient models for retry strategy decisions
-   */
-  static createErrorHandler(config: EvaluatorConfig): ErrorHandlerAgent {
-    return new ErrorHandlerAgent(config.llm, config);
-  }
-  
+
   /**
    * Create a Task Summarizer Agent for generating clean workflow summaries
    * Uses efficient models for structured data extraction and cleaning
@@ -106,7 +82,7 @@ export class AgentFactory {
   static createSummarizer(config: SummarizerConfig): ITaskSummarizer {
     return new TaskSummarizerAgent(config.llm, config);
   }
-  
+
   /**
    * Create a complete Workflow Manager with all agents configured
    * This is the main orchestrator that coordinates all specialized agents
@@ -127,172 +103,7 @@ export class AgentFactory {
       config.workflow || {}
     );
   }
-  
-  /**
-   * Create agents with optimal model selection based on task complexity
-   * Automatically selects appropriate models for different agent types
-   */
-  static createOptimizedAgents(config: MultiAgentConfig, infrastructure: AgentInfrastructure): WorkflowManager {
-    // Create the summarizer if configured
-    const summarizer = this.createSummarizer({
-      llm: infrastructure.llm,
-      model: config.models?.summarizer || 'gpt-5-nano',
-      maxRetries: config.maxRetries || 3,
-      includeRecommendations: true,
-      maxSummaryLength: 500
-    });
-    
-    const optimizedConfig: WorkflowManagerFactoryConfig = {
-      planner: {
-        llm: infrastructure.llm,
-        model: config.models?.planner || 'gpt-5-nano', // High-capability for strategic planning
-        maxRetries: config.maxRetries || 3
-      },
-      executor: {
-        llm: infrastructure.llm,
-        model: config.models?.executor || 'gpt-5-nano', // Efficient for tactical execution
-        browser: infrastructure.browser,
-        domService: infrastructure.domService,
-        maxRetries: config.maxRetries || 3
-      },
-      evaluator: {
-        llm: infrastructure.llm,
-        model: config.models?.evaluator || 'gpt-5-nano', // Efficient for binary decisions
-        maxRetries: config.maxRetries || 2
-      },
-      errorHandler: {
-        llm: infrastructure.llm,
-        model: config.models?.errorHandler || 'gpt-5-nano', // Efficient for retry decisions
-        maxRetries: config.maxRetries || 2
-      },
-      browser: infrastructure.browser,
-      domService: infrastructure.domService,
-      eventBus: infrastructure.eventBus,
-      reporter: infrastructure.reporter,
-      workflow: {
-        maxRetries: config.maxRetries || 3,
-        timeout: config.timeout || 300000,
-        enableReplanning: true,
-        summarizer  // Add the summarizer to workflow config
-      }
-    };
-    
-    return this.createWorkflowManager(optimizedConfig);
-  }
 
-  // Phase 4: Factory method for creating workflow manager with domain services
-  static createWorkflowManagerWithDomainServices(
-    config: MultiAgentConfig, 
-    infrastructure: AgentInfrastructure,
-    enableDomainServices: boolean = true
-  ): WorkflowManager {
-    // Create domain services if enabled
-    let domainServices: {
-      planningService?: PlanningService;
-      executionService?: ExecutionService;
-      evaluationService?: EvaluationService;
-    } = {};
-
-    if (enableDomainServices) {
-      domainServices = this.createDomainServices(infrastructure);
-    }
-
-    // Create the summarizer if configured
-    const summarizer = this.createSummarizer({
-      llm: infrastructure.llm,
-      model: config.models?.summarizer || 'gpt-5-nano',
-      maxRetries: config.maxRetries || 3,
-      includeRecommendations: true,
-      maxSummaryLength: 500
-    });
-    
-    const optimizedConfig: WorkflowManagerFactoryConfig = {
-      planner: {
-        llm: infrastructure.llm,
-        model: config.models?.planner || 'gpt-5-nano',
-        maxRetries: config.maxRetries || 3
-      },
-      executor: {
-        llm: infrastructure.llm,
-        model: config.models?.executor || 'gpt-5-nano',
-        browser: infrastructure.browser,
-        domService: infrastructure.domService,
-        maxRetries: config.maxRetries || 3
-      },
-      evaluator: {
-        llm: infrastructure.llm,
-        model: config.models?.evaluator || 'gpt-5-nano',
-        maxRetries: config.maxRetries || 2
-      },
-      errorHandler: {
-        llm: infrastructure.llm,
-        model: config.models?.errorHandler || 'gpt-5-nano',
-        maxRetries: config.maxRetries || 2
-      },
-      browser: infrastructure.browser,
-      domService: infrastructure.domService,
-      eventBus: infrastructure.eventBus,
-      reporter: infrastructure.reporter,
-      workflow: {
-        maxRetries: config.maxRetries || 3,
-        timeout: config.timeout || 300000,
-        enableReplanning: true,
-        summarizer,
-        // Phase 4: Add domain services
-        ...domainServices,
-        enableDomainServices
-      }
-    };
-    
-    return this.createWorkflowManager(optimizedConfig);
-  }
-
-  // Phase 4: Factory method for creating domain services
-  static createDomainServices(infrastructure: AgentInfrastructure): {
-    planningService: PlanningService;
-    executionService: ExecutionService;
-    evaluationService: EvaluationService;
-  } {
-    // Create domain services using infrastructure components
-    const planningService = new AITaskPlanningService(
-      infrastructure.llm,
-      {
-        llm: infrastructure.llm,
-        model: 'gpt-5-nano', // Use efficient model for planning
-        maxRetries: 3
-      }
-    );
-
-    const executionService = new BrowserExecutionService(
-      infrastructure.llm,
-      infrastructure.browser,
-      infrastructure.domService,
-      {
-        llm: infrastructure.llm,
-        model: 'gpt-5-nano', // Use efficient model for execution
-        browser: infrastructure.browser,
-        domService: infrastructure.domService,
-        maxRetries: 3
-      }
-    );
-
-    const evaluationService = new AIEvaluationService(
-      infrastructure.llm,
-      {
-        llm: infrastructure.llm,
-        model: 'gpt-5-nano', // Use efficient model for evaluation
-        maxRetries: 2
-      }
-    );
-
-    return {
-      planningService,
-      executionService,
-      evaluationService
-    };
-  }
-
-  // Phase 5: Enhanced factory method for creating domain services with integration support
   static createDomainServicesWithIntegration(
     infrastructure: AgentInfrastructure,
     _taskQueue?: TaskQueue,
@@ -343,7 +154,6 @@ export class AgentFactory {
     };
   }
 
-  // Phase 5: Factory method for creating repositories
   static createRepositories(): {
     workflowRepository: WorkflowRepository;
     planRepository: PlanRepository;
@@ -358,167 +168,22 @@ export class AgentFactory {
     };
   }
 
-  // Phase 5: Enhanced factory method with repository support
-  static createWorkflowManagerWithRepositories(
-    config: MultiAgentConfig, 
-    infrastructure: AgentInfrastructure,
-    options: {
-      enableDomainServices?: boolean;
-      enableRepositories?: boolean;
-    } = {}
-  ): WorkflowManager {
-    const {
-      enableDomainServices = true,
-      enableRepositories = true
-    } = options;
-
-    // Create domain services if enabled
-    let domainServices: {
-      planningService?: PlanningService;
-      executionService?: ExecutionService;
-      evaluationService?: EvaluationService;
-    } = {};
-
-    if (enableDomainServices) {
-      domainServices = this.createDomainServices(infrastructure);
-    }
-
-    // Create repositories if enabled
-    let repositories: {
-      workflowRepository?: WorkflowRepository;
-      planRepository?: PlanRepository;
-      memoryRepository?: MemoryRepository;
-    } = {};
-
-    if (enableRepositories) {
-      repositories = this.createRepositories();
-    }
-
-    // Note: Enhanced memory service would be created when needed by WorkflowManager
-
-    // Create the summarizer if configured
-    const summarizer = this.createSummarizer({
-      llm: infrastructure.llm,
-      model: config.models?.summarizer || 'gpt-5-nano',
-      maxRetries: config.maxRetries || 3,
-      includeRecommendations: true,
-      maxSummaryLength: 500
-    });
-    
-    const optimizedConfig: WorkflowManagerFactoryConfig = {
-      planner: {
-        llm: infrastructure.llm,
-        model: config.models?.planner || 'gpt-5-nano',
-        maxRetries: config.maxRetries || 3
-      },
-      executor: {
-        llm: infrastructure.llm,
-        model: config.models?.executor || 'gpt-5-nano',
-        browser: infrastructure.browser,
-        domService: infrastructure.domService,
-        maxRetries: config.maxRetries || 3
-      },
-      evaluator: {
-        llm: infrastructure.llm,
-        model: config.models?.evaluator || 'gpt-5-nano',
-        maxRetries: config.maxRetries || 2
-      },
-      errorHandler: {
-        llm: infrastructure.llm,
-        model: config.models?.errorHandler || 'gpt-5-nano',
-        maxRetries: config.maxRetries || 2
-      },
-      browser: infrastructure.browser,
-      domService: infrastructure.domService,
-      eventBus: infrastructure.eventBus,
-      reporter: infrastructure.reporter,
-      workflow: {
-        maxRetries: config.maxRetries || 3,
-        timeout: config.timeout || 300000,
-        enableReplanning: true,
-        summarizer,
-        // Phase 4: Add domain services
-        ...domainServices,
-        // Phase 5: Add repository support
-        ...repositories,
-        enableDomainServices,
-        enableRepositories
-      }
-    };
-    
-    return this.createWorkflowManager(optimizedConfig);
-  }
-
-  // Phase 6: Factory methods for creating event handlers
-  static createEventHandlers(enableConsoleLogging: boolean = true): {
-    metrics: WorkflowMetricsHandler;
-    logging: WorkflowLoggingHandler;
-  } {
-    return EventHandlerFactory.createStandardHandlers(enableConsoleLogging);
-  }
-
-  static createMetricsHandler(): WorkflowMetricsHandler {
-    return EventHandlerFactory.createMetricsHandler();
-  }
-
-  static createLoggingHandler(enableConsole: boolean = true): WorkflowLoggingHandler {
-    return EventHandlerFactory.createLoggingHandler(enableConsole);
-  }
-
-  // Phase 5: Factory method for creating workflow manager with full integration support
   static createWorkflowManagerWithFullIntegration(
     config: MultiAgentConfig,
-    infrastructure: AgentInfrastructure,
-    options: {
-      enableDomainServices?: boolean;
-      enableRepositories?: boolean;
-      enableQueueIntegration?: boolean;
-      enableStateIntegration?: boolean;
-      enableMonitorIntegration?: boolean;
-    } = {}
+    infrastructure: AgentInfrastructure
   ): WorkflowManager {
-    const {
-      enableDomainServices = true,
-      enableRepositories = true,
-      enableQueueIntegration = true,
-      enableStateIntegration = true,
-      enableMonitorIntegration = true
-    } = options;
+    const taskQueue = new TaskQueue();
+    const stateManager = new StateManager(infrastructure.browser, infrastructure.domService);
+    const workflowMonitor = new WorkflowMonitor(infrastructure.eventBus, infrastructure.reporter);
 
-    // Create core services
-    const taskQueue = enableQueueIntegration ? new TaskQueue() : undefined;
-    const stateManager = enableStateIntegration ? 
-      new StateManager(infrastructure.browser, infrastructure.domService) : undefined;
-    const workflowMonitor = enableMonitorIntegration ?
-      new WorkflowMonitor(infrastructure.eventBus, infrastructure.reporter) : undefined;
+    const domainServices = this.createDomainServicesWithIntegration(
+      infrastructure,
+      taskQueue,
+      stateManager
+    );
 
-    // Create domain services with integration support if enabled
-    let domainServices: {
-      planningService?: PlanningService;
-      executionService?: ExecutionService;
-      evaluationService?: EvaluationService;
-    } = {};
+    const repositories = this.createRepositories();
 
-    if (enableDomainServices) {
-      domainServices = this.createDomainServicesWithIntegration(
-        infrastructure,
-        taskQueue,
-        stateManager
-      );
-    }
-
-    // Create repositories if enabled
-    let repositories: {
-      workflowRepository?: WorkflowRepository;
-      planRepository?: PlanRepository;
-      memoryRepository?: MemoryRepository;
-    } = {};
-
-    if (enableRepositories) {
-      repositories = this.createRepositories();
-    }
-
-    // Create the summarizer
     const summarizer = this.createSummarizer({
       llm: infrastructure.llm,
       model: config.models?.summarizer || 'gpt-5-nano',
@@ -560,118 +225,15 @@ export class AgentFactory {
         timeout: config.timeout || 300000,
         enableReplanning: true,
         summarizer,
-        // Phase 1-3: Core service integrations
         ...(taskQueue && { taskQueue }),
         ...(stateManager && { stateManager }),
         ...(workflowMonitor && { workflowMonitor }),
-        enableQueueIntegration,
-        enableStateIntegration,
-        enableMonitorIntegration,
-        // Phase 4: Domain services
         ...domainServices,
-        enableDomainServices,
-        // Phase 5: Repository support
         ...repositories,
-        enableRepositories
       }
     };
 
     return this.createWorkflowManager(workflowConfig);
-  }
-
-  // Phase 6: Factory method for creating workflow manager with full event handling
-  static createWorkflowManagerWithEventHandling(
-    config: MultiAgentConfig, 
-    infrastructure: AgentInfrastructure,
-    options: {
-      enableDomainServices?: boolean;
-      enableRepositories?: boolean; 
-      enableEventHandlers?: boolean;
-      enableConsoleLogging?: boolean;
-    } = {}
-  ): {
-    workflowManager: WorkflowManager;
-    eventHandlers: {
-      metrics: WorkflowMetricsHandler;
-      logging: WorkflowLoggingHandler;
-    };
-  } {
-    const {
-      enableDomainServices = true,
-      enableRepositories = true,
-      enableEventHandlers = true,
-      enableConsoleLogging = true
-    } = options;
-
-    // Create domain services if enabled
-    const domainServices = enableDomainServices ? 
-      this.createDomainServices(infrastructure) : {};
-
-    // Create repositories if enabled
-    const repositories = enableRepositories ? 
-      this.createRepositories() : {};
-
-    // Create workflow manager with all enhancements
-    const optimizedConfig: WorkflowManagerFactoryConfig = {
-      planner: {
-        llm: infrastructure.llm,
-        model: config.models?.planner || 'gpt-5-nano',
-        maxRetries: config.maxRetries || 3
-      },
-      executor: {
-        llm: infrastructure.llm,
-        model: config.models?.executor || 'gpt-5-nano',
-        browser: infrastructure.browser,
-        domService: infrastructure.domService,
-        maxRetries: config.maxRetries || 3
-      },
-      evaluator: {
-        llm: infrastructure.llm,
-        model: config.models?.evaluator || 'gpt-5-nano',
-        maxRetries: config.maxRetries || 2
-      },
-      errorHandler: {
-        llm: infrastructure.llm,
-        model: config.models?.errorHandler || 'gpt-5-nano',
-        maxRetries: config.maxRetries || 2
-      },
-      browser: infrastructure.browser,
-      domService: infrastructure.domService,
-      eventBus: infrastructure.eventBus,
-      reporter: infrastructure.reporter,
-      workflow: {
-        maxRetries: config.maxRetries || 3,
-        timeout: config.timeout || 300000,
-        enableReplanning: true,
-        ...domainServices,
-        ...repositories,
-        enableDomainServices,
-        enableRepositories
-      }
-    };
-
-    const workflowManager = this.createWorkflowManager(optimizedConfig);
-
-    // Create and register event handlers if enabled
-    let eventHandlers: { metrics: WorkflowMetricsHandler; logging: WorkflowLoggingHandler };
-    
-    if (enableEventHandlers) {
-      eventHandlers = this.createEventHandlers(enableConsoleLogging);
-      
-      // The WorkflowManager will automatically register these through its WorkflowEventBus
-      // This can be done through a future enhancement to the WorkflowManager constructor
-    } else {
-      // Create empty handlers for consistent interface
-      eventHandlers = {
-        metrics: new WorkflowMetricsHandler(),
-        logging: new WorkflowLoggingHandler(false)
-      };
-    }
-
-    return {
-      workflowManager,
-      eventHandlers
-    };
   }
 }
 
@@ -682,7 +244,7 @@ export interface WorkflowManagerFactoryConfig {
   planner: PlannerConfig;
   executor: ExecutorConfig;
   evaluator: EvaluatorConfig;
-  errorHandler: EvaluatorConfig; // Reuses evaluator config pattern
+  errorHandler: EvaluatorConfig;
   browser: Browser;
   domService: DomService;
   eventBus: EnhancedEventBusInterface;

@@ -8,7 +8,5 @@ export * from '@/core/interfaces/event-bus.interface';
 export * from '@/core/interfaces/llm.interface';
 export * from '@/core/interfaces/file-system.interface';
 export * from '@/core/interfaces/screenshotter.interface';
-
-// Multi-agent architecture types
 export * from '@/core/interfaces/agent.interface';
 export * from '@/core/types/agent-types';

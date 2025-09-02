@@ -6,9 +6,9 @@ import { LLM } from '@/core/types';
 export type ChatOpenAIConfig = {
   /**
    * The model to use.
-   * @default gpt-4o
+   * @default gpt-5-nano
    */
-  model?: 'gpt-4o' | 'gpt-5-nano' | 'gpt-4-turbo' | 'o4-mini' | 'gpt-5-mini' | 'gpt-5-nano';
+  model?: 'gpt-5-mini' | 'gpt-5-nano';
   /**
    * The maximum number of retries.
    * This is usefull when you have a low quota such as Tier 1 or 2.
@@ -28,7 +28,7 @@ export type ChatOpenAIConfig = {
 };
 
 const DEFAULT_CONFIG = {
-  model: 'gpt-4o',
+  model: 'gpt-5-nano',
   maxRetries: 6,
   maxConcurrency: 2,
 } as const;

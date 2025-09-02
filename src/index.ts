@@ -3,20 +3,8 @@
  */
 export { 
   initMultiAgent,
-  initMultiAgentForEnvironment,
-  initMultiAgentWithCustomConfig,
-  InitMultiAgentConfig,
-  createCustomWorkflowManager,
-  initInfrastructure
+  InitMultiAgentConfig
 } from './init-multi-agent';
-
-/**
- * Export unified initialization with backward compatibility
- */
-export { 
-  initAgents, 
-  UnifiedAgentConfig 
-} from './init-agents';
 
 /**
  * Export interfaces and types

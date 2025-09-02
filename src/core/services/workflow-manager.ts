@@ -519,10 +519,8 @@ export class WorkflowManager {
     try {
       const initialUrl = startUrl || 'https://amazon.com';
       
-      // Get variables from variable manager as Value Objects
-      const variables: Variable[] = []; // TODO: Convert from VariableManager
+      const variables: Variable[] = [];
       
-      // Create workflow entity
       const workflowResult = this.createWorkflow(goal, initialUrl, variables);
       if (workflowResult.isFailure()) {
         throw new Error(`Failed to create workflow: ${workflowResult.getError()}`);
