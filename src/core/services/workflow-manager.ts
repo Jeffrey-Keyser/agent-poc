@@ -81,18 +81,12 @@ export interface WorkflowManagerConfig {
   enableReplanning?: boolean;
   variableManager?: VariableManager;
   summarizer?: ITaskSummarizer;
-  maxReplansPerStep?: number;      // Max replans per individual step
-  maxTotalReplans?: number;         // Max replans for entire workflow
-  enableDegradation?: boolean;      // Allow degraded success
-  allowEarlyExit?: boolean;           // Can workflow exit with partial results?
-  minAcceptableCompletion?: number;   // Minimum % completion to exit early (default 60)
-  criticalSteps?: string[];           // Step IDs that must complete
-  taskQueue?: any; // TaskQueue type
-  enableQueueIntegration?: boolean;
+  maxReplansPerStep?: number; 
+  maxTotalReplans?: number;
+  allowEarlyExit?: boolean;
+  minAcceptableCompletion?: number;
+  criticalSteps?: string[];
   stateManager?: StateManager;
-  enableStateIntegration?: boolean;
-  workflowMonitor?: any; // WorkflowMonitor type
-  enableMonitorIntegration?: boolean;
   planningService?: PlanningService;
   executionService?: ExecutionService;
   evaluationService?: EvaluationService;
@@ -166,14 +160,11 @@ export class WorkflowManager {
   private errors: string[] = [];
   
   private planningService: PlanningService | undefined;
-  // TODO: Future enhancement - integrate execution service for task execution
   // private executionService: ExecutionService | undefined;
-  // TODO: Future enhancement - integrate evaluation service for result evaluation  
   // private evaluationService: EvaluationService | undefined;
 
   private workflowRepository: WorkflowRepository | undefined;
   private planRepository: PlanRepository | undefined;
-  // TODO: Future enhancement - integrate memory repository with MemoryService
   // private memoryRepository: MemoryRepository | undefined;
 
   private workflowEventBus: WorkflowEventBus;
@@ -202,16 +193,15 @@ export class WorkflowManager {
       maxRetries: 3,
       timeout: 300000,
       enableReplanning: true,
-      maxReplansPerStep: 3, // TODO: Remove in Phase 4
-      enableDegradation: true,
-      allowEarlyExit: false,  // Opt-in for early exit
+      maxReplansPerStep: 3,
+      allowEarlyExit: false,
       minAcceptableCompletion: 60,
       criticalSteps: [],
       ...config
     };
     // this.maxReplansPerStep = this.config.maxReplansPerStep || 3;
     
-    this.taskQueue = config.taskQueue || new TaskQueue();
+    this.taskQueue =  new TaskQueue();
     this.stateManager = new StateManager(browser, domService);
     this.memoryService = new MemoryService(this.eventBus);
     this.variableManager = config.variableManager || new VariableManager();
@@ -219,18 +209,9 @@ export class WorkflowManager {
       this.summarizer = config.summarizer;
     }
     
-    // Setup TaskQueue event listeners for enhanced monitoring
-    if (config.enableQueueIntegration !== false) {
-      this.setupTaskQueueEventListeners();
-    }
-    
-    if (config.enableStateIntegration !== false) {
-      this.setupStateManagerEventListeners();
-    }
-    
-    if (config.enableMonitorIntegration !== false) {
-      this.connectDomainEventsToMonitor();
-    }
+    this.setupTaskQueueEventListeners();
+    this.setupStateManagerEventListeners();
+    this.connectDomainEventsToMonitor();
     
     this.planningService = config.planningService;
     // TODO: Future enhancement - uncomment when implementing execution/evaluation services
@@ -340,15 +321,12 @@ export class WorkflowManager {
     }
 
     const aggregateResult = ExecutionAggregate.create(contextResult.getValue());
-    
     if (aggregateResult.isFailure()) {
       return Result.fail(`Failed to create execution aggregate: ${aggregateResult.getError()}`);
     }
 
     const executionAggregate = aggregateResult.getValue();
-    if (this.config.enableStateIntegration !== false) {
-      executionAggregate.setStateManager(this.stateManager);
-    }
+    executionAggregate.setStateManager(this.stateManager);
 
     return Result.ok(executionAggregate);
   }
@@ -517,7 +495,7 @@ export class WorkflowManager {
     this.reporter.log(`🚀 Starting workflow: ${goal}`);
     
     try {
-      const initialUrl = startUrl || 'https://amazon.com';
+      const initialUrl = startUrl || '';
       
       const variables: Variable[] = [];
       
@@ -765,12 +743,10 @@ export class WorkflowManager {
               const replanRequired = await this.checkForReplanning();
               if (replanRequired) {
                 this.reporter.log(`🔄 Replanning executed after successful task due to significant state changes`);
-                // Continue execution with new plan - break out of current task loop
                 break;
               }
             }
             
-            // Check if we should exit early with partial results
             if (this.config.allowEarlyExit) {
               const completion = this.calculateCompletionPercentage();
               const criticalStepsComplete = this.checkCriticalSteps();
@@ -808,7 +784,6 @@ export class WorkflowManager {
               // Mark task for retry
               const retryResult = task.retry();
               if (retryResult.isSuccess()) {
-                // Continue the loop to retry this task
                 continue;
               } else {
                 this.reporter.log(`❌ Failed to mark task for retry: ${retryResult.getError()}`);
@@ -821,7 +796,6 @@ export class WorkflowManager {
               const replanRequired = await this.checkForReplanning();
               if (replanRequired) {
                 this.reporter.log(`🔄 Replanning executed due to task failure and state changes`);
-                // Continue execution with new plan
                 continue;
               }
             }
@@ -1090,9 +1064,7 @@ export class WorkflowManager {
     
     if (!currentState || !previousState) return false;
     
-    // Check if state changed significantly
     if (this.stateManager.hasStateChanged(previousState, currentState)) {
-      // Analyze what changed
       const changes = this.analyzeStateChanges(previousState, currentState);
       
       if (changes.requiresReplanning) {
@@ -1100,8 +1072,6 @@ export class WorkflowManager {
         
         // Create checkpoint before replanning
         this.stateManager.createCheckpoint('before-replan');
-        
-        // Trigger replanning with state context
         const newPlan = await this.replanWithStateContext(currentState);
         
         if (newPlan) {
@@ -1124,7 +1094,6 @@ export class WorkflowManager {
     const prevActions = new Set(prev.availableActions);
     const currActions = new Set(curr.availableActions);
     
-    // Calculate differences using the same method as StateManager
     const sectionChanges = this.calculateSetDifference(prevSections, currSections);
     const actionChanges = this.calculateSetDifference(prevActions, currActions);
     
@@ -1428,8 +1397,6 @@ export class WorkflowManager {
     }
   }
 
-  // Domain Service Integration Methods
-  
   /**
    * Creates a plan using the domain planning service
    */
@@ -1473,12 +1440,6 @@ export class WorkflowManager {
       return Result.fail(`Domain planning error: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-
-  // Removed unused executeTaskWithDomainService method
-
-  // Removed unused evaluateTaskWithDomainService method
-
-  // Note: Additional domain service methods could be added here for future enhancements
 
   /**
    * Get current workflow metrics from the metrics handler
@@ -1578,7 +1539,6 @@ export class WorkflowManager {
    * Setup TaskQueue event listeners for monitoring integration
    */
   private setupTaskQueueEventListeners(): void {
-    // Listen to task queue events and bridge them to the event bus
     this.taskQueue.on('task:enqueued', (data: any) => {
       this.reporter.log(`📥 Task enqueued: ${data.task.name} (Queue: ${data.queueSize}, Ready: ${data.readyCount}, Blocked: ${data.blockedCount})`);
       this.eventBus.emit('queue:task-added', data);
@@ -1619,7 +1579,6 @@ export class WorkflowManager {
    * Setup StateManager event listeners for monitoring integration
    */
   private setupStateManagerEventListeners(): void {
-    // Listen to StateManager events and bridge them to the event bus
     this.stateManager.on('state:captured', (data: any) => {
       this.reporter.log(`📸 State captured: ${data.url} (Sections: ${data.sectionsCount}, Actions: ${data.actionsCount})`);
       this.eventBus.emit('state:captured', data);
@@ -1640,7 +1599,6 @@ export class WorkflowManager {
    * Connect domain events to WorkflowMonitor through EventBus bridge
    */
   private connectDomainEventsToMonitor(): void {
-    // Domain entity events (if using domain events from entities)
     if (this.workflow) {
       // Note: In a full implementation, these would be set up when domain events are emitted
       // For now, we'll set up the basic infrastructure for bridging domain events to the event bus
