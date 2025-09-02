@@ -176,7 +176,6 @@ export class WorkflowOrchestrationService {
     try {
       this.contexts.set(workflowId, context);
       
-      // Phase 1: Initialize and validate
       await this.executePhase(context, ExecutionPhase.INITIALIZING, async () => {
         const initResult = await this.initializeWorkflow(workflow);
         if (initResult.isFailure()) {
@@ -184,7 +183,6 @@ export class WorkflowOrchestrationService {
         }
       });
 
-      // Phase 2: Planning
       await this.executePhase(context, ExecutionPhase.PLANNING, async () => {
         const plan = await this.createOrRefinePlan(workflow, context);
         if (!plan) {
@@ -194,7 +192,6 @@ export class WorkflowOrchestrationService {
         workflow.attachPlan(plan);
       });
 
-      // Phase 3: Execution loop with evaluation and adaptation
       let completedSuccessfully = false;
       
       while (!completedSuccessfully && context.retryCount < this.config.maxRetries) {
@@ -246,7 +243,6 @@ export class WorkflowOrchestrationService {
         }
       }
 
-      // Phase 4: Completion
       const finalResult = await this.executePhase(context, ExecutionPhase.COMPLETING, async () => {
         return this.completeWorkflow(workflow, context, completedSuccessfully);
       });

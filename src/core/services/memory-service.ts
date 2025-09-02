@@ -1,15 +1,14 @@
 import { EventBusInterface } from '../interfaces/event-bus.interface';
-// Phase 5: Import repository pattern
 import { MemoryRepository, LearnedPattern, PatternContext } from '../repositories';
 
 export interface MemoryEntry {
   id: string;
   timestamp: Date;
-  context: string;           // What situation triggered this learning
-  learning: string;          // What was learned
-  actionToAvoid?: string;    // What action failed
-  alternativeAction?: string; // What to try instead
-  confidence: number;        // How confident we are in this learning
+  context: string;
+  learning: string;
+  actionToAvoid?: string;
+  alternativeAction?: string;
+  confidence: number;
 }
 
 export interface MemoryContext {
@@ -25,7 +24,6 @@ export class MemoryService {
 
   constructor(
     private eventBus?: EventBusInterface,
-    // Phase 5: Inject repository
     private memoryRepository?: MemoryRepository
   ) {}
 
@@ -51,7 +49,6 @@ export class MemoryService {
       confidence: details?.confidence || 0.7
     };
 
-    // Phase 5: Use repository if available, otherwise fallback to legacy storage
     if (this.memoryRepository) {
       try {
         const learnedPattern: LearnedPattern = {
@@ -87,7 +84,6 @@ export class MemoryService {
     this.eventBus?.emit('memory:learning-added', entry);
   }
   
-  // Phase 5: Helper method for legacy storage
   private addToLegacyStorage(entry: MemoryEntry, context: MemoryContext): void {
     const contextKey = this.getContextKey(context);
     if (!this.memories.has(contextKey)) {
@@ -102,7 +98,6 @@ export class MemoryService {
     }
   }
 
-  // Phase 5: Helper method to extract tags from context
   private extractTagsFromContext(context: MemoryContext): string[] {
     const tags: string[] = [];
     
@@ -133,7 +128,6 @@ export class MemoryService {
    * Get relevant memories for a given context
    */
   async getRelevantMemories(context: MemoryContext): Promise<MemoryEntry[]> {
-    // Phase 5: Use repository if available, otherwise fallback to legacy storage
     if (this.memoryRepository) {
       try {
         const domain = this.extractDomainFromUrl(context.url);
@@ -188,7 +182,6 @@ export class MemoryService {
       .slice(0, 10); // Return top 10 most relevant
   }
 
-  // Phase 5: Helper method to extract domain from URL
   private extractDomainFromUrl(url: string): string | undefined {
     try {
       return new URL(url).hostname;
@@ -197,7 +190,6 @@ export class MemoryService {
     }
   }
 
-  // Phase 5: Helper method to extract task types from context
   private extractTaskTypes(context: MemoryContext): string[] {
     const taskTypes: string[] = [];
     

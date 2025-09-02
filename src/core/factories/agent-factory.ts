@@ -254,19 +254,16 @@ export interface WorkflowManagerFactoryConfig {
     timeout?: number;
     enableReplanning?: boolean;
     summarizer?: ITaskSummarizer;
-    // Phase 1-3: Core service integrations
     taskQueue?: TaskQueue;
     stateManager?: StateManager;
     workflowMonitor?: WorkflowMonitor;
     enableQueueIntegration?: boolean;
     enableStateIntegration?: boolean;
     enableMonitorIntegration?: boolean;
-    // Phase 4: Domain Services support
     planningService?: PlanningService;
     executionService?: ExecutionService;
     evaluationService?: EvaluationService;
     enableDomainServices?: boolean;
-    // Phase 5: Repository support
     workflowRepository?: WorkflowRepository;
     planRepository?: PlanRepository;
     memoryRepository?: MemoryRepository;

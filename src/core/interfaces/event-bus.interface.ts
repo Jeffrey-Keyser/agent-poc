@@ -15,7 +15,6 @@ export type AppEvents = {
   'replan:triggered': any;
   // Memory system events
   'memory:learning-added': any;
-  // Phase 1: TaskQueue events
   'queue:task-added': any;
   'queue:task-removed': any;
   'queue:task-completed': any;
@@ -23,7 +22,6 @@ export type AppEvents = {
   'queue:task-blocked': any;
   'queue:optimized': any;
   'queue:cleanup': any;
-  // Phase 3: StateManager events
   'state:captured': any;
   'state:checkpoint': any;
   'state:data-extracted': any;

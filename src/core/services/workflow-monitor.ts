@@ -24,7 +24,6 @@ export interface StepEvent {
   timestamp: Date;
 }
 
-// Phase 3: New event interfaces for TaskQueue and StateManager integration
 export interface QueueEvent {
   task: StrategicTask;
   queueSize: number;
@@ -74,7 +73,6 @@ export class WorkflowMonitor {
     errorCount: 0
   };
   
-  // Phase 3: New metrics for TaskQueue and StateManager
   private queueMetrics: QueueMetrics = {
     totalEnqueued: 0,
     totalDequeued: 0,
@@ -113,7 +111,6 @@ export class WorkflowMonitor {
     this.eventBus.on('task:failed', this.onTaskFailed.bind(this));
     this.eventBus.on('replan:triggered', this.onReplanTriggered.bind(this));
     
-    // Phase 3: Queue event listeners
     this.eventBus.on('queue:task-added', this.onTaskEnqueued.bind(this));
     this.eventBus.on('queue:task-removed', this.onTaskDequeued.bind(this));
     this.eventBus.on('queue:task-blocked', this.onTaskBlocked.bind(this));
@@ -122,7 +119,6 @@ export class WorkflowMonitor {
     this.eventBus.on('queue:optimized', this.onQueueOptimized.bind(this));
     this.eventBus.on('queue:cleanup', this.onQueueCleanup.bind(this));
     
-    // Phase 3: State event listeners
     this.eventBus.on('state:captured', this.onStateCapture.bind(this));
     this.eventBus.on('state:checkpoint', this.onCheckpointCreated.bind(this));
     this.eventBus.on('state:data-extracted', this.onDataExtracted.bind(this));
@@ -226,7 +222,6 @@ export class WorkflowMonitor {
     this.reporter.log(`📋 New plan generated with ${event.newPlanSize} steps`);
   }
   
-  // Phase 3: Queue event handlers
   private onTaskEnqueued(event: QueueEvent): void {
     this.queueMetrics.totalEnqueued++;
     this.queueMetrics.maxQueueSize = Math.max(
@@ -265,7 +260,6 @@ export class WorkflowMonitor {
     this.reporter.log(`🧹 Queue cleanup: removed ${event.removedCount} old completed tasks, ${event.remainingCount} remaining`);
   }
 
-  // Phase 3: State event handlers
   private onStateCapture(event: StateEvent): void {
     this.stateMetrics.totalStateCaptures++;
     
@@ -321,7 +315,6 @@ export class WorkflowMonitor {
     return { ...this.metrics };
   }
   
-  // Phase 3: Getters for new metrics
   getQueueMetrics(): QueueMetrics {
     return { ...this.queueMetrics };
   }
@@ -354,7 +347,6 @@ export class WorkflowMonitor {
     this.reporter.log(`   • Replanning Events: ${this.metrics.replanCount}`);
     this.reporter.log(`   • Total Errors: ${this.metrics.errorCount}`);
     
-    // Phase 3: Enhanced metrics reporting
     this.reporter.log(`\n📊 Queue Metrics:`);
     this.reporter.log(`   • Total Enqueued: ${this.queueMetrics.totalEnqueued}`);
     this.reporter.log(`   • Total Dequeued: ${this.queueMetrics.totalDequeued}`);
@@ -381,7 +373,6 @@ export class WorkflowMonitor {
       errorCount: 0
     };
     
-    // Phase 3: Reset new metrics
     this.queueMetrics = {
       totalEnqueued: 0,
       totalDequeued: 0,
@@ -414,7 +405,6 @@ export interface WorkflowMetrics {
   errorCount: number;
 }
 
-// Phase 3: New metric interfaces for TaskQueue and StateManager
 export interface QueueMetrics {
   totalEnqueued: number;
   totalDequeued: number;

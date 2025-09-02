@@ -36,7 +36,6 @@ export class StateManager extends EventEmitter {
     this.stateHistory.push(state);
     this.currentState = state;
     
-    // Phase 3: Emit state captured event for monitoring
     this.emit('state:captured', {
       url: state.url,
       sectionsCount: state.visibleSections.length,
@@ -317,7 +316,6 @@ export class StateManager extends EventEmitter {
       this.persistentData.set(key, value);
       console.log(`📝 Added extracted data - ${key}: ${truncateForLogging(value, 100)}`);
       
-      // Phase 3: Emit data extraction event for monitoring
       this.emit('data:extracted', {
         keys: [key],
         itemCount: 1,
@@ -341,7 +339,6 @@ export class StateManager extends EventEmitter {
       console.log(`📝 Merged extracted data - ${key}: ${truncateForLogging(value, 100)}`);
     }
     
-    // Phase 3: Emit data extraction event for monitoring (batch)
     if (validEntries.length > 0) {
       this.emit('data:extracted', {
         keys: validEntries.map(([key]) => key),
@@ -385,7 +382,6 @@ export class StateManager extends EventEmitter {
       });
       console.log(`💾 Created checkpoint: ${name}`);
       
-      // Phase 3: Emit checkpoint created event for monitoring
       this.emit('checkpoint:created', {
         name,
         checkpointCount: this.checkpoints.size,

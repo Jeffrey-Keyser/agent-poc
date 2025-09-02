@@ -1,14 +1,10 @@
 /**
  * Domain Event Integration Tests
  * 
- * Comprehensive tests for Phase 6 domain events integration
- * Tests the complete flow from entity events to event bus to handlers
  */
-
 import { 
   WorkflowEventBus,
   WorkflowEventBusFactory,
-  DomainEventBridge
 } from '../../../core/services/domain-event-bridge';
 import { 
   WorkflowMetricsHandler,
@@ -28,11 +24,9 @@ import {
   TaskId,
   Variable,
   Url,
-  Confidence,
   Priority,
   Intent
 } from '../../../core/value-objects';
-import { DomainEvent, EventBus } from '../../../core/domain-events';
 
 // Mock legacy event bus
 class MockLegacyEventBus {

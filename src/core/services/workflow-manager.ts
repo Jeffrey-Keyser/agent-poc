@@ -678,7 +678,7 @@ export class WorkflowManager {
             continue;
           }
           
-          // Execute the task using legacy method for now (Phase 4 will use domain services)
+          // Execute the task using legacy method for now
           const strategicTask = this.convertTaskToStrategicTask(task, currentStep);
           const executionResult = await this.executeStrategicStep(strategicTask);
           
