@@ -7,6 +7,7 @@ import {
 } from '../value-objects';
 import { TaskStatus, TaskResult } from './status-types';
 import { Result } from './result';
+import { DomainEvent } from '../domain-events';
 
 export interface TaskExecutionContext {
   retryCount: number;
@@ -27,6 +28,7 @@ export class Task {
   private startTime: Date | undefined;
   private endTime: Date | undefined;
   private evidence: Evidence[] = [];
+  private readonly domainEvents: DomainEvent[] = [];
 
   constructor(
     id: TaskId,
@@ -175,6 +177,9 @@ export class Task {
     this.updatedAt = new Date();
     this.error = undefined; // Clear previous error
 
+    // Note: Task events will be published by WorkflowManager which has the context
+    // this.recordEvent(new TaskStartedEvent(...));
+
     return Result.ok();
   }
 
@@ -197,6 +202,9 @@ export class Task {
       this.evidence = [...evidence];
     }
 
+    // Note: Task events will be published by WorkflowManager which has the context
+    // this.recordEvent(new TaskCompletedEvent(...));
+
     return Result.ok();
   }
 
@@ -216,6 +224,10 @@ export class Task {
     if (this.canRetry()) {
       this.status = TaskStatus.Retrying;
       this.retryCount++;
+      
+      // Note: Task events will be published by WorkflowManager which has the context
+      // this.recordEvent(new TaskRetriedEvent(...));
+      
       return Result.ok();
     }
 
@@ -229,6 +241,9 @@ export class Task {
       confidence: 0,
       timestamp: new Date()
     };
+
+    // Note: Task events will be published by WorkflowManager which has the context  
+    // this.recordEvent(new TaskFailedEvent(...));
 
     return Result.ok();
   }
@@ -383,5 +398,14 @@ export class Task {
       executionDuration: this.getExecutionDuration(),
       confidence: confidence?.getValue()
     };
+  }
+
+  // Domain events support - currently not used, events published by WorkflowManager
+  getDomainEvents(): ReadonlyArray<DomainEvent> {
+    return this.domainEvents;
+  }
+
+  clearDomainEvents(): void {
+    this.domainEvents.splice(0, this.domainEvents.length);
   }
 }

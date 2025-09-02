@@ -1,5 +1,5 @@
 import { initMultiAgent } from './src/init-multi-agent';
-import { Variable } from './src/core/entities/variable';
+import { Variable } from './src/core/value-objects/variable';
 import { ChatOpenAI } from './src/models/chat-openai';
 
 /**
@@ -28,8 +28,7 @@ async function main() {
   // Initialize the LLM
   const llm = new ChatOpenAI({
     apiKey: process.env.OPENAI_API_KEY!,
-    model: 'gpt-4o-mini',
-    temperature: 0.1
+    model: 'gpt-5-nano'
   });
   
   // Configure secure variables
@@ -53,10 +52,10 @@ async function main() {
     variables,
     apiKey: process.env.OPENAI_API_KEY!,
     models: {
-      planner: 'gpt-4o-mini',    // Strategic planning
-      executor: 'gpt-4o-mini',   // DOM interaction with forms
-      evaluator: 'gpt-4o-mini',  // Success validation
-      errorHandler: 'gpt-4o-mini' // Auth error handling
+      planner: 'gpt-5-nano',    // Strategic planning
+      executor: 'gpt-5-nano',   // DOM interaction with forms
+      evaluator: 'gpt-5-nano',  // Success validation
+      errorHandler: 'gpt-5-nano' // Auth error handling
     },
     maxRetries: 3,
     timeout: 300000,
@@ -116,8 +115,7 @@ async function main() {
 async function runSearchOnlyWorkflow() {
   const llm = new ChatOpenAI({
     apiKey: process.env.OPENAI_API_KEY!,
-    model: 'gpt-4o-mini',
-    temperature: 0.1
+    model: 'gpt-5-nano',
   });
   
   const workflow = initMultiAgent({
@@ -125,7 +123,7 @@ async function runSearchOnlyWorkflow() {
     headless: false,
     variables: [],
     apiKey: process.env.OPENAI_API_KEY!,
-    models: { planner: 'gpt-4o-mini', executor: 'gpt-4o-mini', evaluator: 'gpt-4o-mini' },
+    models: { planner: 'gpt-5-nano', executor: 'gpt-5-nano', evaluator: 'gpt-5-nano' },
     maxRetries: 2,
     startUrl: 'https://github.com',
     reporterName: 'GitHubSearch'

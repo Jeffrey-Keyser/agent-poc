@@ -1,4 +1,4 @@
-import { Variable } from '../entities/variable';
+import { Variable } from '../value-objects/variable';
 
 export class VariableManager {
   private variables: Map<string, Variable> = new Map();

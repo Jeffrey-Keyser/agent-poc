@@ -1,5 +1,5 @@
 import { initMultiAgent } from './src/init-multi-agent';
-import { Variable } from './src/core/entities/variable';
+import { Variable } from './src/core/value-objects/variable';
 import { ChatOpenAI } from './src/models/chat-openai';
 import { truncateExtractedData } from './src/core/shared/utils';
 
@@ -10,7 +10,7 @@ import { truncateExtractedData } from './src/core/shared/utils';
  * to perform complex tasks on Amazon with strategic planning and execution.
  * 
  * The system will:
- * 1. Create a strategic plan (3-7 high-level steps)
+ * 1. Create a strategic plan
  * 2. Execute each step using runtime DOM discovery
  * 3. Evaluate outcomes at the strategic level
  * 4. Replan automatically if steps fail
@@ -20,8 +20,7 @@ async function main() {
   // Initialize the LLM for all agents
   const llm = new ChatOpenAI({
     apiKey: process.env.OPENAI_API_KEY!,
-    model: 'gpt-5-nano',
-    temperature: 0.1
+    model: 'gpt-5-nano'
   });
   
   // Configure variables (if needed)
@@ -30,17 +29,16 @@ async function main() {
     new Variable({ name: 'max_price', value: '100', isSecret: false })
   ];
 
-  // Initialize the multi-agent system
   const workflow = initMultiAgent({
     llm,
     headless: false,
     variables,
-    apiKey: process.env.OPENAI_API_KEY!, // For backward compatibility
+    apiKey: process.env.OPENAI_API_KEY!,
     models: {
-      planner: 'gpt-5-mini',    // Strategic planning - needs reasoning
-      executor: 'gpt-5-mini',   // DOM interaction - needs adaptation
-      evaluator: 'gpt-5-nano',  // Outcome validation - binary decisions
-      errorHandler: 'gpt-5-mini' // Retry strategy - simple decisions
+      planner: 'gpt-5-mini',
+      executor: 'gpt-5-mini', 
+      evaluator: 'gpt-5-nano', 
+      errorHandler: 'gpt-5-mini'
     },
     maxRetries: 3,
     timeout: 300000, // 5 minutes

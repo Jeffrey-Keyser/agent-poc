@@ -12,39 +12,12 @@ import {
 import { Result } from './result';
 import { Plan } from './plan';
 import { Task } from './task';
-
-// Domain events for workflow
-export interface DomainEvent {
-  aggregateId: string;
-  occurredAt: Date;
-}
-
-export class WorkflowStartedEvent implements DomainEvent {
-  constructor(
-    public readonly workflowId: WorkflowId,
-    public readonly goal: string,
-    public readonly aggregateId: string = workflowId.toString(),
-    public readonly occurredAt: Date = new Date()
-  ) {}
-}
-
-export class WorkflowCompletedEvent implements DomainEvent {
-  constructor(
-    public readonly workflowId: WorkflowId,
-    public readonly result: WorkflowResult,
-    public readonly aggregateId: string = workflowId.toString(),
-    public readonly occurredAt: Date = new Date()
-  ) {}
-}
-
-export class WorkflowFailedEvent implements DomainEvent {
-  constructor(
-    public readonly workflowId: WorkflowId,
-    public readonly reason: string,
-    public readonly aggregateId: string = workflowId.toString(),
-    public readonly occurredAt: Date = new Date()
-  ) {}
-}
+import { 
+  DomainEvent,
+  WorkflowStartedEvent,
+  WorkflowCompletedEvent, 
+  WorkflowFailedEvent
+} from '../domain-events';
 
 // Execution history to track workflow progress
 export class ExecutionHistory {
@@ -264,7 +237,7 @@ export class Workflow {
       duration: this.updatedAt.getTime() - this.createdAt.getTime()
     };
 
-    this.recordEvent(new WorkflowCompletedEvent(this.id, workflowResult));
+    this.recordEvent(new WorkflowCompletedEvent(this.id, summary, extractedData, workflowResult.duration, this.executionHistory.getSuccessfulTasks()));
     
     return Result.ok();
   }
@@ -277,7 +250,7 @@ export class Workflow {
     this.status = WorkflowStatus.Failed;
     this.completionSummary = `Failed: ${reason}`;
     this.updatedAt = new Date();
-    this.recordEvent(new WorkflowFailedEvent(this.id, reason));
+    this.recordEvent(new WorkflowFailedEvent(this.id, reason, null, this.updatedAt.getTime() - this.createdAt.getTime(), this.executionHistory.getSuccessfulTasks()));
     
     return Result.ok();
   }
@@ -289,6 +262,7 @@ export class Workflow {
 
     this.status = WorkflowStatus.Cancelled;
     this.updatedAt = new Date();
+    // Note: WorkflowCancelledEvent not implemented yet - could be added as future enhancement
     
     return Result.ok();
   }

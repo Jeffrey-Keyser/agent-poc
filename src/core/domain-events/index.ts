@@ -84,6 +84,15 @@ export {
   NotificationService
 } from './event-handlers';
 
+// Event store
+export {
+  IEventStore,
+  EventStoreEntry,
+  EventQuery,
+  EventStoreStats,
+  InMemoryEventStore
+} from './event-store';
+
 /**
  * Event type constants for easy reference
  */

@@ -97,7 +97,6 @@ export interface ActionResult {
 export interface PlannerConfig {
   llm: any; // LLM interface reference
   model: string;
-  temperature?: number;
   maxRetries?: number;
   // Deprecated: keeping for backward compatibility
   apiKey?: string;
@@ -109,7 +108,6 @@ export interface ExecutorConfig {
   browser: any; // Browser interface reference
   domService: any; // DomService interface reference
   variableManager?: any; // VariableManager for variable interpolation
-  temperature?: number;
   maxRetries?: number;
   // Deprecated: keeping for backward compatibility
   apiKey?: string;
@@ -118,7 +116,6 @@ export interface ExecutorConfig {
 export interface EvaluatorConfig {
   llm: any; // LLM interface reference
   model: string;
-  temperature?: number;
   maxRetries?: number;
   // Deprecated: keeping for backward compatibility
   apiKey?: string;

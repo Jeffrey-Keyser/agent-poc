@@ -1,7 +1,9 @@
 import { Plan, Step, Task, Result } from '../entities';
 import { PlanId, WorkflowId, StepId, TaskId, Confidence, Priority, Intent } from '../value-objects';
+import { StateManager } from '../services/state-manager';
+import { PageState } from '../types/agent-types';
 
-// Planning context for creating plans
+// Enhanced planning context with state information
 export interface PlanningContext {
   goal: string;
   url: string;
@@ -10,6 +12,13 @@ export interface PlanningContext {
   availableActions?: string[];
   userInstructions?: string;
   timeConstraints?: number; // in milliseconds
+  workflowId?: WorkflowId; // Fix: Add workflowId to link plans to existing workflows
+  // StateManager integration fields
+  currentUrl?: string;
+  visibleSections?: string[];
+  extractedData?: Record<string, any>;
+  checkpoints?: string[];
+  stateHistory?: PageState[];
 }
 
 // Evaluation feedback for refining plans
@@ -40,7 +49,8 @@ export interface PlanningService {
    */
   createPlan(
     goal: string,
-    context: PlanningContext
+    context: PlanningContext,
+    stateManager?: StateManager
   ): Promise<Result<Plan>>;
 
   /**
@@ -48,7 +58,8 @@ export interface PlanningService {
    */
   refinePlan(
     plan: Plan,
-    feedback: EvaluationFeedback[]
+    feedback: EvaluationFeedback[],
+    stateManager?: StateManager
   ): Promise<Result<Plan>>;
 
   /**
@@ -104,6 +115,7 @@ export interface PlanComplexityEstimate {
  */
 export class AITaskPlanningService implements PlanningService {
   constructor(
+    private readonly stateManager?: StateManager
     // private readonly _llm: LLM,
     // private readonly _memoryService?: MemoryService
   ) {
@@ -112,7 +124,8 @@ export class AITaskPlanningService implements PlanningService {
 
   async createPlan(
     goal: string,
-    context: PlanningContext
+    context: PlanningContext,
+    stateManager?: StateManager
   ): Promise<Result<Plan>> {
     try {
       // Validate inputs
@@ -124,12 +137,33 @@ export class AITaskPlanningService implements PlanningService {
         return Result.fail('URL is required for planning');
       }
 
+      // Use provided state manager or instance state manager
+      const activeStateManager = stateManager || this.stateManager;
+
+      // Enhance context with state information
+      let enhancedContext = context;
+      if (activeStateManager) {
+        const currentState = activeStateManager.getCurrentState();
+        const extractedData = activeStateManager.getAllExtractedData();
+        
+        enhancedContext = {
+          ...context,
+          currentUrl: currentState?.url || context.url,
+          availableActions: currentState?.availableActions || context.availableActions || [],
+          visibleSections: currentState?.visibleSections || [],
+          extractedData: extractedData || {},
+          checkpoints: activeStateManager.getCheckpointNames(),
+          stateHistory: activeStateManager.getStateHistory()
+        };
+      }
+
       // Create a new plan with generated ID
       const planId = PlanId.generate();
-      const workflowId = WorkflowId.generate();
+      // Fix: Use provided workflowId or generate new one as fallback
+      const workflowId = enhancedContext.workflowId || WorkflowId.generate();
 
-      // Generate steps using LLM (this would be the actual implementation)
-      const steps = await this.generateStepsFromGoal(goal, context);
+      // Generate steps using LLM with enhanced context
+      const steps = await this.generateStepsFromGoal(goal, enhancedContext);
       
       if (!steps.length) {
         return Result.fail('Could not generate any steps for the given goal');
@@ -149,11 +183,31 @@ export class AITaskPlanningService implements PlanningService {
 
   async refinePlan(
     plan: Plan,
-    feedback: EvaluationFeedback[]
+    feedback: EvaluationFeedback[],
+    stateManager?: StateManager
   ): Promise<Result<Plan>> {
     try {
       if (feedback.length === 0) {
         return Result.ok(plan); // No feedback, return unchanged plan
+      }
+
+      // Use provided state manager or instance state manager
+      const activeStateManager = stateManager || this.stateManager;
+
+      // Use state insights for intelligent replanning if StateManager is available
+      if (activeStateManager) {
+        const currentState = activeStateManager.getCurrentState();
+        const previousState = activeStateManager.getPreviousState();
+        
+        // Analyze state transitions
+        const stateTransition = this.analyzeStateTransition(previousState, currentState);
+        
+        // Check if we can use a checkpoint for recovery
+        const checkpoints = activeStateManager.getCheckpointNames();
+        const recoveryPoint = this.findBestRecoveryPoint(checkpoints, feedback);
+        
+        // Create refined plan based on state analysis
+        return await this.createAdaptivePlan(plan, feedback, stateTransition, recoveryPoint);
       }
 
       // Group feedback by success/failure
@@ -381,14 +435,14 @@ export class AITaskPlanningService implements PlanningService {
     const step1 = Step.create(
       StepId.generate(),
       `Navigate to ${context.url}`,
-      0,
+      1, // Fix: Step order must be positive (start from 1, not 0)
       Confidence.create(90).getValue()
     );
 
     const step2 = Step.create(
       StepId.generate(),
       `Accomplish goal: ${goal}`,
-      1,
+      2, // Fix: Second step should be order 2
       Confidence.create(75).getValue()
     );
 
@@ -489,6 +543,178 @@ export class AITaskPlanningService implements PlanningService {
 
     return suggestions;
   }
+
+  // StateManager integration helper methods
+  private analyzeStateTransition(previousState: PageState | null, currentState: PageState | null): StateTransitionAnalysis {
+    if (!previousState || !currentState) {
+      return {
+        urlChanged: false,
+        sectionsChanged: false,
+        actionsChanged: false,
+        changeScore: 0,
+        significantChange: false
+      };
+    }
+
+    const urlChanged = previousState.url !== currentState.url;
+    const prevSections = new Set(previousState.visibleSections);
+    const currSections = new Set(currentState.visibleSections);
+    const prevActions = new Set(previousState.availableActions);
+    const currActions = new Set(currentState.availableActions);
+
+    // Calculate change scores
+    const sectionChangeScore = this.calculateSetDifference(prevSections, currSections);
+    const actionChangeScore = this.calculateSetDifference(prevActions, currActions);
+    const overallChangeScore = (sectionChangeScore + actionChangeScore) / 2;
+
+    return {
+      urlChanged,
+      sectionsChanged: sectionChangeScore > 0.2,
+      actionsChanged: actionChangeScore > 0.2,
+      changeScore: overallChangeScore,
+      significantChange: overallChangeScore > 0.5 || urlChanged
+    };
+  }
+
+  private calculateSetDifference(set1: Set<string>, set2: Set<string>): number {
+    const union = new Set([...set1, ...set2]);
+    const intersection = new Set([...set1].filter(x => set2.has(x)));
+    
+    if (union.size === 0) return 0;
+    return 1 - (intersection.size / union.size);
+  }
+
+  private findBestRecoveryPoint(checkpoints: string[], feedback: EvaluationFeedback[]): string | null {
+    if (!checkpoints.length) return null;
+
+    // Simple heuristic: find the most recent successful checkpoint before failures
+    const failedStepIds = new Set(feedback.filter(f => !f.success).map(f => f.stepId.toString()));
+    
+    // Look for checkpoints that don't contain failed step names
+    for (let i = checkpoints.length - 1; i >= 0; i--) {
+      const checkpoint = checkpoints[i];
+      const hasFailedStepName = Array.from(failedStepIds).some(stepId => 
+        checkpoint.toLowerCase().includes(stepId.toLowerCase())
+      );
+      
+      if (!hasFailedStepName) {
+        return checkpoint;
+      }
+    }
+    
+    return checkpoints.length > 0 ? checkpoints[0] : null;
+  }
+
+  private async createAdaptivePlan(
+    originalPlan: Plan, 
+    feedback: EvaluationFeedback[], 
+    stateTransition: StateTransitionAnalysis, 
+    recoveryPoint: string | null
+  ): Promise<Result<Plan>> {
+    try {
+      const refinedSteps: Step[] = [];
+      const existingSteps = originalPlan.getSteps();
+
+      // If significant state change occurred, add recovery step
+      if (stateTransition.significantChange && recoveryPoint) {
+        const recoveryStep = Step.create(
+          StepId.generate(),
+          `Recover from checkpoint: ${recoveryPoint} due to significant state change`,
+          refinedSteps.length + 1, // Fix: Use proper order based on existing steps
+          Confidence.create(80).getValue()
+        );
+        
+        if (recoveryStep.isSuccess()) {
+          refinedSteps.push(recoveryStep.getValue());
+        }
+      }
+
+      // Process existing steps with feedback
+      for (let i = 0; i < existingSteps.length; i++) {
+        const step = existingSteps[i];
+        const stepFeedback = feedback.find(f => f.stepId.equals(step.getId()));
+
+        if (stepFeedback && !stepFeedback.success) {
+          // Create improved step based on feedback and state context
+          const improvedStep = await this.createStateAwareImprovedStep(step, stepFeedback, stateTransition);
+          if (improvedStep.isSuccess()) {
+            refinedSteps.push(improvedStep.getValue());
+          } else {
+            refinedSteps.push(step); // Keep original if improvement fails
+          }
+        } else {
+          refinedSteps.push(step); // Keep successful steps unchanged
+        }
+      }
+
+      // Add adaptive steps based on state analysis
+      if (stateTransition.urlChanged) {
+        const navigationVerificationStep = Step.create(
+          StepId.generate(),
+          'Verify navigation completed and page is fully loaded',
+          refinedSteps.length,
+          Confidence.create(85).getValue()
+        );
+        
+        if (navigationVerificationStep.isSuccess()) {
+          refinedSteps.push(navigationVerificationStep.getValue());
+        }
+      }
+
+      // Create new plan with refined steps
+      const refinedPlanResult = Plan.create(
+        PlanId.generate(),
+        originalPlan.getWorkflowId(),
+        refinedSteps
+      );
+
+      if (refinedPlanResult.isFailure()) {
+        return Result.fail(`Failed to create adaptive plan: ${refinedPlanResult.getError()}`);
+      }
+
+      return Result.ok(refinedPlanResult.getValue());
+
+    } catch (error) {
+      return Result.fail(`Adaptive planning error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async createStateAwareImprovedStep(
+    step: Step, 
+    feedback: EvaluationFeedback, 
+    stateTransition: StateTransitionAnalysis
+  ): Promise<Result<Step>> {
+    let improvedDescription = step.getDescription();
+    
+    // Enhance description based on state insights
+    if (stateTransition.sectionsChanged) {
+      improvedDescription += ` (Adapt to changed page sections)`;
+    }
+    
+    if (stateTransition.actionsChanged) {
+      improvedDescription += ` (Updated for new available actions)`;
+    }
+    
+    // Include feedback
+    improvedDescription += ` (Improved: ${feedback.feedback})`;
+    
+    // Adjust confidence based on state stability
+    let confidenceAdjustment = 10; // Base improvement
+    if (stateTransition.significantChange) {
+      confidenceAdjustment = 5; // Lower confidence if state is unstable
+    }
+    
+    const improvedConfidence = Confidence.create(
+      Math.min(100, Math.max(20, step.getConfidence().getValue() + confidenceAdjustment))
+    ).getValue();
+
+    return Step.create(
+      StepId.generate(),
+      improvedDescription,
+      step.getOrder(),
+      improvedConfidence
+    );
+  }
 }
 
 // Memory service interface (referenced in the implementation)
@@ -504,4 +730,13 @@ export interface LearnedPattern {
   pattern: string;
   successRate: number;
   usageCount: number;
+}
+
+// StateManager integration interfaces
+export interface StateTransitionAnalysis {
+  urlChanged: boolean;
+  sectionsChanged: boolean;
+  actionsChanged: boolean;
+  changeScore: number;
+  significantChange: boolean;
 }

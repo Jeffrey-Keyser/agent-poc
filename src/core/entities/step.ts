@@ -6,6 +6,7 @@ import {
 import { StepStatus, TaskResult, StepResult } from './status-types';
 import { Result } from './result';
 import { Task } from './task';
+import { DomainEvent } from '../domain-events';
 
 export class Step {
   private readonly id: StepId;
@@ -15,6 +16,7 @@ export class Step {
   private updatedAt: Date;
   private startTime: Date | undefined;
   private endTime: Date | undefined;
+  private readonly domainEvents: DomainEvent[] = [];
 
   constructor(
     id: StepId,
@@ -414,5 +416,14 @@ export class Step {
       overallConfidence: this.getOverallConfidence(),
       executionDuration: this.getExecutionDuration()
     };
+  }
+
+  // Domain events support - placeholder for future step events
+  getDomainEvents(): ReadonlyArray<DomainEvent> {
+    return this.domainEvents;
+  }
+
+  clearDomainEvents(): void {
+    this.domainEvents.splice(0, this.domainEvents.length);
   }
 }

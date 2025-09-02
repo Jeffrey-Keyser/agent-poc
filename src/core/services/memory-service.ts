@@ -1,4 +1,6 @@
 import { EventBusInterface } from '../interfaces/event-bus.interface';
+// Phase 5: Import repository pattern
+import { MemoryRepository, LearnedPattern, PatternContext } from '../repositories';
 
 export interface MemoryEntry {
   id: string;
@@ -21,12 +23,16 @@ export class MemoryService {
   private recentLearnings: MemoryEntry[] = [];
   private maxRecentMemories = 20;
 
-  constructor(private eventBus?: EventBusInterface) {}
+  constructor(
+    private eventBus?: EventBusInterface,
+    // Phase 5: Inject repository
+    private memoryRepository?: MemoryRepository
+  ) {}
 
   /**
    * Add a new learning to memory
    */
-  addLearning(
+  async addLearning(
     context: MemoryContext,
     learning: string,
     details?: {
@@ -34,7 +40,7 @@ export class MemoryService {
       alternativeAction?: string;
       confidence?: number;
     }
-  ): void {
+  ): Promise<void> {
     const entry: MemoryEntry = {
       id: this.generateId(),
       timestamp: new Date(),
@@ -45,7 +51,44 @@ export class MemoryService {
       confidence: details?.confidence || 0.7
     };
 
-    // Store by context key
+    // Phase 5: Use repository if available, otherwise fallback to legacy storage
+    if (this.memoryRepository) {
+      try {
+        const learnedPattern: LearnedPattern = {
+          id: entry.id,
+          context: entry.context,
+          pattern: learning,
+          successRate: (details?.confidence || 0.7) * 100,
+          usageCount: 1,
+          createdAt: entry.timestamp,
+          lastUsedAt: entry.timestamp,
+          tags: this.extractTagsFromContext(context),
+          metadata: {
+            actionToAvoid: details?.actionToAvoid,
+            alternativeAction: details?.alternativeAction,
+            taskGoal: context.taskGoal,
+            url: context.url,
+            pageSection: context.pageSection
+          }
+        };
+        
+        await this.memoryRepository.savePattern(learnedPattern);
+      } catch (error) {
+        console.error('Failed to save pattern to repository:', error);
+        // Fallback to legacy storage
+        this.addToLegacyStorage(entry, context);
+      }
+    } else {
+      // Use legacy storage
+      this.addToLegacyStorage(entry, context);
+    }
+
+    // Emit event for monitoring
+    this.eventBus?.emit('memory:learning-added', entry);
+  }
+  
+  // Phase 5: Helper method for legacy storage
+  private addToLegacyStorage(entry: MemoryEntry, context: MemoryContext): void {
     const contextKey = this.getContextKey(context);
     if (!this.memories.has(contextKey)) {
       this.memories.set(contextKey, []);
@@ -57,15 +100,68 @@ export class MemoryService {
     if (this.recentLearnings.length > this.maxRecentMemories) {
       this.recentLearnings.pop();
     }
+  }
 
-    // Emit event for monitoring
-    this.eventBus?.emit('memory:learning-added', entry);
+  // Phase 5: Helper method to extract tags from context
+  private extractTagsFromContext(context: MemoryContext): string[] {
+    const tags: string[] = [];
+    
+    // Extract domain from URL
+    try {
+      const url = new URL(context.url);
+      tags.push(url.hostname);
+    } catch (e) {
+      // Ignore invalid URLs
+    }
+    
+    // Add task-based tags
+    tags.push('task');
+    if (context.pageSection) {
+      tags.push(context.pageSection);
+    }
+    
+    // Extract simple keywords from task goal
+    const goalWords = context.taskGoal.toLowerCase().split(/\s+/).filter(word => 
+      word.length > 3 && !['this', 'that', 'with', 'from', 'they', 'have', 'will'].includes(word)
+    );
+    tags.push(...goalWords.slice(0, 3)); // Take first 3 meaningful words
+    
+    return tags;
   }
 
   /**
    * Get relevant memories for a given context
    */
-  getRelevantMemories(context: MemoryContext): MemoryEntry[] {
+  async getRelevantMemories(context: MemoryContext): Promise<MemoryEntry[]> {
+    // Phase 5: Use repository if available, otherwise fallback to legacy storage
+    if (this.memoryRepository) {
+      try {
+        const domain = this.extractDomainFromUrl(context.url);
+        const patternContext: PatternContext = {
+          goal: context.taskGoal,
+          ...(domain && { domain }),
+          taskTypes: this.extractTaskTypes(context)
+        };
+        
+        const patterns = await this.memoryRepository.findByContext(patternContext, 10);
+        
+        // Convert learned patterns back to memory entries for backward compatibility
+        return patterns.map(pattern => ({
+          id: pattern.id,
+          timestamp: pattern.lastUsedAt,
+          context: pattern.context,
+          learning: pattern.pattern,
+          actionToAvoid: pattern.metadata?.actionToAvoid,
+          alternativeAction: pattern.metadata?.alternativeAction,
+          confidence: pattern.successRate / 100
+        }));
+      } catch (error) {
+        console.error('Failed to get patterns from repository:', error);
+        // Fallback to legacy storage
+      }
+    }
+
+    // Legacy implementation
     const contextKey = this.getContextKey(context);
     const exactMatches = this.memories.get(contextKey) || [];
     
@@ -92,11 +188,51 @@ export class MemoryService {
       .slice(0, 10); // Return top 10 most relevant
   }
 
+  // Phase 5: Helper method to extract domain from URL
+  private extractDomainFromUrl(url: string): string | undefined {
+    try {
+      return new URL(url).hostname;
+    } catch (e) {
+      return undefined;
+    }
+  }
+
+  // Phase 5: Helper method to extract task types from context
+  private extractTaskTypes(context: MemoryContext): string[] {
+    const taskTypes: string[] = [];
+    
+    const goal = context.taskGoal.toLowerCase();
+    
+    // Simple task type detection
+    if (goal.includes('search') || goal.includes('find')) {
+      taskTypes.push('search');
+    }
+    if (goal.includes('buy') || goal.includes('purchase') || goal.includes('order')) {
+      taskTypes.push('purchase');
+    }
+    if (goal.includes('login') || goal.includes('sign in')) {
+      taskTypes.push('authentication');
+    }
+    if (goal.includes('click') || goal.includes('button')) {
+      taskTypes.push('interaction');
+    }
+    if (goal.includes('form') || goal.includes('submit')) {
+      taskTypes.push('form-submission');
+    }
+    
+    // Default task type
+    if (taskTypes.length === 0) {
+      taskTypes.push('general');
+    }
+    
+    return taskTypes;
+  }
+
   /**
    * Get formatted memory string for LLM context
    */
-  getMemoryPrompt(context: MemoryContext): string {
-    const relevantMemories = this.getRelevantMemories(context);
+  async getMemoryPrompt(context: MemoryContext): Promise<string> {
+    const relevantMemories = await this.getRelevantMemories(context);
     
     if (relevantMemories.length === 0) {
       return 'No previous learnings for this context.';
@@ -119,12 +255,12 @@ export class MemoryService {
   /**
    * Learn from a failed action
    */
-  learnFromFailure(
+  async learnFromFailure(
     context: MemoryContext,
     failedAction: string,
     failureReason: string,
     suggestion?: string
-  ): void {
+  ): Promise<void> {
     const learning = `Action "${failedAction}" failed: ${failureReason}`;
     const details: { actionToAvoid: string; alternativeAction?: string; confidence: number } = {
       actionToAvoid: failedAction,
@@ -133,19 +269,19 @@ export class MemoryService {
     if (suggestion) {
       details.alternativeAction = suggestion;
     }
-    this.addLearning(context, learning, details);
+    await this.addLearning(context, learning, details);
   }
 
   /**
    * Learn from a successful pattern
    */
-  learnFromSuccess(
+  async learnFromSuccess(
     context: MemoryContext,
     successfulAction: string,
     outcome: string
-  ): void {
+  ): Promise<void> {
     const learning = `Action "${successfulAction}" succeeded: ${outcome}`;
-    this.addLearning(context, learning, {
+    await this.addLearning(context, learning, {
       confidence: 0.8
     });
   }

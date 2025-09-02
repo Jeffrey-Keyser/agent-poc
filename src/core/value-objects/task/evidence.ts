@@ -1,6 +1,6 @@
 import { Result } from '../web/url';
 
-export type EvidenceType = 'screenshot' | 'html' | 'text' | 'element' | 'network' | 'console' | 'error';
+export type EvidenceType = 'screenshot' | 'html' | 'text' | 'element' | 'network' | 'console' | 'error' | 'execution-log';
 
 export interface EvidenceMetadata {
   timestamp: Date;
@@ -123,6 +123,20 @@ export class Evidence {
    */
   getData(): string {
     return this.data;
+  }
+
+  /**
+   * Returns the evidence value (alias for getData for compatibility)
+   */
+  getValue(): string {
+    return this.data;
+  }
+
+  /**
+   * Returns the evidence type
+   */
+  getType(): EvidenceType {
+    return this.type;
   }
 
   /**

@@ -1,5 +1,5 @@
 import { Page } from 'playwright';
-import { VariableString } from '../entities/variable-string';
+import { VariableString } from '../value-objects/variable-string';
 
 export type Coordinates = {
   x: number;

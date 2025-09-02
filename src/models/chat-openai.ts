@@ -8,12 +8,7 @@ export type ChatOpenAIConfig = {
    * The model to use.
    * @default gpt-4o
    */
-  model?: 'gpt-4o' | 'gpt-4o-mini' | 'gpt-4-turbo' | 'o4-mini' | 'gpt-5-mini' | 'gpt-5-nano';
-  /**
-   * The temperature to use. We recommend setting this to 0 for consistency.
-   * @default 0
-   */
-  temperature?: number;
+  model?: 'gpt-4o' | 'gpt-5-nano' | 'gpt-4-turbo' | 'o4-mini' | 'gpt-5-mini' | 'gpt-5-nano';
   /**
    * The maximum number of retries.
    * This is usefull when you have a low quota such as Tier 1 or 2.
@@ -34,7 +29,6 @@ export type ChatOpenAIConfig = {
 
 const DEFAULT_CONFIG = {
   model: 'gpt-4o',
-  temperature: 0,
   maxRetries: 6,
   maxConcurrency: 2,
 } as const;
@@ -45,7 +39,6 @@ export class ChatOpenAI implements LLM {
   constructor(config: ChatOpenAIConfig) {
     this.model = new LChatOpenAI({
       model: config.model ?? DEFAULT_CONFIG.model,
-      // temperature: config.temperature ?? DEFAULT_CONFIG.temperature,
       openAIApiKey: config.apiKey,
       maxRetries: config.maxRetries ?? DEFAULT_CONFIG.maxRetries,
       maxConcurrency: config.maxConcurrency ?? DEFAULT_CONFIG.maxConcurrency,

@@ -12,7 +12,7 @@ import { ChatOpenAI } from './src/models/chat-openai';
 
 const llm = new ChatOpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
-  model: 'gpt-4o-mini'
+  model: 'gpt-5-nano'
 });
 
 // Legacy system (existing behavior)
@@ -28,9 +28,9 @@ const multiAgent = initAgents({
   headless: false,
   useMultiAgent: true,  // Enable new architecture
   models: {
-    planner: 'gpt-4o-mini',
-    executor: 'gpt-4o-mini',
-    evaluator: 'gpt-4o-mini'
+    planner: 'gpt-5-nano',
+    executor: 'gpt-5-nano',
+    evaluator: 'gpt-5-nano'
   }
 });
 ```
@@ -45,10 +45,10 @@ const workflow = initMultiAgent({
   headless: false,
   variables: [],
   models: {
-    planner: 'gpt-4o-mini',
-    executor: 'gpt-4o-mini',
-    evaluator: 'gpt-4o-mini',
-    errorHandler: 'gpt-4o-mini'
+    planner: 'gpt-5-nano',
+    executor: 'gpt-5-nano',
+    evaluator: 'gpt-5-nano',
+    errorHandler: 'gpt-5-nano'
   }
 });
 
@@ -133,9 +133,9 @@ const workflow = initMultiAgent({
   headless: false,
   variables: [],
   models: {
-    planner: 'gpt-4o-mini',
-    executor: 'gpt-4o-mini',
-    evaluator: 'gpt-4o-mini'
+    planner: 'gpt-5-nano',
+    executor: 'gpt-5-nano',
+    evaluator: 'gpt-5-nano'
   }
 });
 ```

@@ -62,10 +62,10 @@ export const DEPLOYMENT_CONFIGS: Record<DeploymentEnvironment, DeploymentConfig>
     maxRetries: 5, // More retries for flaky dev environments
     variables: [],
     models: {
-      planner: 'gpt-4o-mini',    // Fast, cost-effective for development
-      executor: 'gpt-4o-mini',   // Fast iterations
-      evaluator: 'gpt-4o-mini',  // Quick feedback
-      errorHandler: 'gpt-4o-mini'
+      planner: 'gpt-5-nano',    // Fast, cost-effective for development
+      executor: 'gpt-5-nano',   // Fast iterations
+      evaluator: 'gpt-5-nano',  // Quick feedback
+      errorHandler: 'gpt-5-nano'
     },
     browser: {
       viewport: { width: 1280, height: 720 },
@@ -93,10 +93,10 @@ export const DEPLOYMENT_CONFIGS: Record<DeploymentEnvironment, DeploymentConfig>
     maxRetries: 3,
     variables: [],
     models: {
-      planner: 'gpt-4o-mini',    // Consistent, reliable
-      executor: 'gpt-4o-mini',   // Deterministic behavior
-      evaluator: 'gpt-4o-mini',  // Binary decisions
-      errorHandler: 'gpt-4o-mini'
+      planner: 'gpt-5-nano',    // Consistent, reliable
+      executor: 'gpt-5-nano',   // Deterministic behavior
+      evaluator: 'gpt-5-nano',  // Binary decisions
+      errorHandler: 'gpt-5-nano'
     },
     browser: {
       viewport: { width: 1024, height: 768 },
@@ -124,10 +124,10 @@ export const DEPLOYMENT_CONFIGS: Record<DeploymentEnvironment, DeploymentConfig>
     maxRetries: 3,
     variables: [],
     models: {
-      planner: 'gpt-4o-mini',    // Production-ready models
-      executor: 'gpt-4o-mini',   
-      evaluator: 'gpt-4o-mini',  
-      errorHandler: 'gpt-4o-mini'
+      planner: 'gpt-5-nano',    // Production-ready models
+      executor: 'gpt-5-nano',   
+      evaluator: 'gpt-5-nano',  
+      errorHandler: 'gpt-5-nano'
     },
     browser: {
       viewport: { width: 1920, height: 1080 }, // Production-like resolution
@@ -155,10 +155,10 @@ export const DEPLOYMENT_CONFIGS: Record<DeploymentEnvironment, DeploymentConfig>
     maxRetries: 3,   // Conservative retries to avoid cascading failures
     variables: [],
     models: {
-      planner: 'gpt-4o-mini',    // Cost-optimized for production scale
-      executor: 'gpt-4o-mini',   // Efficient for high-frequency operations
-      evaluator: 'gpt-4o-mini',  // Fast binary decisions
-      errorHandler: 'gpt-4o-mini' // Quick retry decisions
+      planner: 'gpt-5-nano',    // Cost-optimized for production scale
+      executor: 'gpt-5-nano',   // Efficient for high-frequency operations
+      evaluator: 'gpt-5-nano',  // Fast binary decisions
+      errorHandler: 'gpt-5-nano' // Quick retry decisions
     },
     browser: {
       viewport: { width: 1920, height: 1080 },
@@ -290,10 +290,10 @@ export function getRecommendedConfig(useCase: 'web-scraping' | 'e-commerce' | 's
           userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },
         models: {
-          planner: 'gpt-4o-mini',
-          executor: 'gpt-4o-mini',    // Fast DOM operations
-          evaluator: 'gpt-4o-mini',   // Quick validation
-          errorHandler: 'gpt-4o-mini'
+          planner: 'gpt-5-nano',
+          executor: 'gpt-5-nano',    // Fast DOM operations
+          evaluator: 'gpt-5-nano',   // Quick validation
+          errorHandler: 'gpt-5-nano'
         }
       };
       
@@ -305,10 +305,10 @@ export function getRecommendedConfig(useCase: 'web-scraping' | 'e-commerce' | 's
           viewport: { width: 1920, height: 1080 }, // Full desktop experience
         },
         models: {
-          planner: 'gpt-4o-mini',     // Complex purchase planning
-          executor: 'gpt-4o-mini',    // Careful form filling
-          evaluator: 'gpt-4o-mini',   // Accurate validation
-          errorHandler: 'gpt-4o-mini' // Smart retry logic
+          planner: 'gpt-5-nano',     // Complex purchase planning
+          executor: 'gpt-5-nano',    // Careful form filling
+          evaluator: 'gpt-5-nano',   // Accurate validation
+          errorHandler: 'gpt-5-nano' // Smart retry logic
         }
       };
       
@@ -320,10 +320,10 @@ export function getRecommendedConfig(useCase: 'web-scraping' | 'e-commerce' | 's
           viewport: { width: 1366, height: 768 }, // Common social media resolution
         },
         models: {
-          planner: 'gpt-4o-mini',     // Creative content planning
-          executor: 'gpt-4o-mini',    // Precise interactions
-          evaluator: 'gpt-4o-mini',   // Content validation
-          errorHandler: 'gpt-4o-mini'
+          planner: 'gpt-5-nano',     // Creative content planning
+          executor: 'gpt-5-nano',    // Precise interactions
+          evaluator: 'gpt-5-nano',   // Content validation
+          errorHandler: 'gpt-5-nano'
         }
       };
       
@@ -335,10 +335,10 @@ export function getRecommendedConfig(useCase: 'web-scraping' | 'e-commerce' | 's
           viewport: { width: 1280, height: 720 },
         },
         models: {
-          planner: 'gpt-4o-mini',     // Strategic automation planning
-          executor: 'gpt-4o-mini',    // Reliable execution
-          evaluator: 'gpt-4o-mini',   // Thorough validation
-          errorHandler: 'gpt-4o-mini' // Smart error handling
+          planner: 'gpt-5-nano',     // Strategic automation planning
+          executor: 'gpt-5-nano',    // Reliable execution
+          evaluator: 'gpt-5-nano',   // Thorough validation
+          errorHandler: 'gpt-5-nano' // Smart error handling
         }
       };
       

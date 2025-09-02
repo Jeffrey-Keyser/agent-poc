@@ -1364,7 +1364,6 @@ export class AgentFactory {
   static createPlanner(config: PlannerConfig): ITaskPlanner {
     const llm = new ChatOpenAI({
       model: 'gpt-5-mini',
-      temperature: 0.3,
       apiKey: config.apiKey
     });
     
@@ -1374,7 +1373,6 @@ export class AgentFactory {
   static createExecutor(config: ExecutorConfig): ITaskExecutor {
     const llm = new ChatOpenAI({
       model: 'gpt-5-nano',
-      temperature: 0.1,
       apiKey: config.apiKey
     });
     

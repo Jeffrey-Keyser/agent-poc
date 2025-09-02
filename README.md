@@ -209,9 +209,9 @@ interface MultiAgentConfig {
   headless: boolean;
   variables: Variable[];
   models?: {
-    planner?: string;    // default: 'gpt-4o-mini'
-    executor?: string;   // default: 'gpt-4o-mini'
-    evaluator?: string;  // default: 'gpt-4o-mini'
+    planner?: string;    // default: 'gpt-5-nano'
+    executor?: string;   // default: 'gpt-5-nano'
+    evaluator?: string;  // default: 'gpt-5-nano'
   };
   maxRetries?: number;   // default: 3
   timeout?: number;       // default: 300000ms

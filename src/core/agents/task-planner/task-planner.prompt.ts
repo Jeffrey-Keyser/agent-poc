@@ -49,7 +49,7 @@ OUTPUT FORMAT (respond with valid JSON):
       "description": "Search for wireless headphones",
       "targetConcept": "main search functionality",
       "inputData": "wireless headphones",
-      "expectedResult": "Search results showing headphone products"
+      "expectedOutcome": "Search results showing headphone products"
     },
     {
       "step": 2,
@@ -57,7 +57,7 @@ OUTPUT FORMAT (respond with valid JSON):
       "description": "Apply price filter up to $100",
       "targetConcept": "price filtering options",
       "inputData": { "maxPrice": 100 },
-      "expectedResult": "Results filtered to show only items under $100"
+      "expectedOutcome": "Results filtered to show only items under $100"
     }
   ]
 }

@@ -1,6 +1,8 @@
 import { Task, Step, Result, TaskResult, ExecutionContext } from '../entities';
 import { TaskId, ActionType, Evidence, Url, Viewport, PageState, Duration, Timeout } from '../value-objects';
 import { Browser } from '../interfaces/browser.interface';
+import { TaskQueue } from '../services/task-queue';
+import { StrategicTask } from '../types/agent-types';
 
 // Execution context for task execution
 export interface TaskExecutionContext {
@@ -64,7 +66,8 @@ export interface ExecutionService {
   executeTask(
     task: Task,
     context: TaskExecutionContext,
-    config?: Partial<StepExecutionConfig>
+    config?: Partial<StepExecutionConfig>,
+    queue?: TaskQueue
   ): Promise<Result<EnhancedTaskResult>>;
 
   /**
@@ -73,7 +76,8 @@ export interface ExecutionService {
   executeStep(
     step: Step,
     context: ExecutionContext,
-    config?: StepExecutionConfig
+    config?: StepExecutionConfig,
+    queue?: TaskQueue
   ): Promise<Result<{ stepId: string; success: boolean; taskResults: TaskResult[]; confidence: number; }>>;
 
   /**
@@ -126,6 +130,7 @@ export interface RecoveryAction {
 export class BrowserExecutionService implements ExecutionService {
   constructor(
     private readonly browser: Browser,
+    private readonly taskQueue?: TaskQueue
     // private readonly _llm: LLM,
     // private readonly _domService?: DOMService
   ) {
@@ -135,15 +140,36 @@ export class BrowserExecutionService implements ExecutionService {
   async executeTask(
     task: Task,
     context: TaskExecutionContext,
-    config: Partial<StepExecutionConfig> = {}
+    config: Partial<StepExecutionConfig> = {},
+    queue?: TaskQueue
   ): Promise<Result<EnhancedTaskResult>> {
     const startTime = new Date();
     const evidence: Evidence[] = [];
     const actionsTaken: ExecutionAction[] = [];
     let retryCount = 0;
     const maxRetries = config.retryPolicy?.maxRetries ?? 3;
+    
+    // Use provided queue or instance queue
+    const activeQueue = queue || this.taskQueue;
 
     try {
+      // Check queue dependencies if available
+      if (activeQueue) {
+        const strategicTask = this.convertToStrategicTask(task);
+        
+        if (!activeQueue.areDependenciesMet(strategicTask)) {
+          const unmetDeps = activeQueue.getUnmetDependencies(strategicTask);
+          return Result.fail(`Task ${task.getId()} has unmet dependencies: ${unmetDeps.join(', ')}`);
+        }
+        
+        // Priority handling - optimize for high priority tasks
+        const priority = task.getPriority();
+        if (this.isHighPriority(priority) && activeQueue.size() > 10) {
+          // Fast-track high priority tasks
+          activeQueue.optimizeForHighPriority();
+          await this.optimizeForHighPriority(task);
+        }
+      }
       // Pre-execution validation
       const validationResult = await this.validateExecutionConditions(task, context);
       if (validationResult.isFailure()) {
@@ -227,6 +253,13 @@ export class BrowserExecutionService implements ExecutionService {
         return Result.fail(`Failed to complete task: ${taskCompletionResult.getError()}`);
       }
 
+      // Mark completed in queue
+      if (activeQueue && taskResult && taskResult.success) {
+        activeQueue.markCompleted(task.getId().toString());
+      } else if (activeQueue && lastError) {
+        activeQueue.markFailed(task.getId().toString(), lastError.message);
+      }
+
       // Create enhanced result
       const enhancedResult: EnhancedTaskResult = {
         ...taskResult,
@@ -248,11 +281,15 @@ export class BrowserExecutionService implements ExecutionService {
   async executeStep(
     step: Step,
     context: ExecutionContext,
-    config: StepExecutionConfig = this.getDefaultStepConfig()
+    config: StepExecutionConfig = this.getDefaultStepConfig(),
+    queue?: TaskQueue
   ): Promise<Result<{ stepId: string; success: boolean; taskResults: TaskResult[]; confidence: number; }>> {
     const startTime = new Date();
     const taskResults: TaskResult[] = [];
     let allTasksSucceeded = true;
+    
+    // Use provided queue or instance queue
+    const activeQueue = queue || this.taskQueue;
 
     try {
       // Start the step
@@ -263,6 +300,23 @@ export class BrowserExecutionService implements ExecutionService {
 
       // Execute all tasks in the step
       const tasks = step.getTasks();
+      
+      if (activeQueue) {
+        // Enqueue all tasks with dependencies
+        tasks.forEach((task, index) => {
+          const strategicTask = this.convertToStrategicTask(task);
+          strategicTask.dependencies = index > 0 ? [tasks[index - 1].getId().toString()] : [];
+          
+          if (this.isHighPriority(task.getPriority())) {
+            activeQueue.enqueuePriority(strategicTask);
+          } else {
+            activeQueue.enqueue(strategicTask);
+          }
+        });
+        
+        // Execute ready tasks potentially in parallel
+        return this.executeWithQueue(step, context, activeQueue, config);
+      }
       
       for (const task of tasks) {
         // Create task execution context from step context
@@ -282,7 +336,7 @@ export class BrowserExecutionService implements ExecutionService {
         };
 
         // Execute the task
-        const taskResult = await this.executeTask(task, taskContext, config);
+        const taskResult = await this.executeTask(task, taskContext, config, activeQueue);
         
         if (taskResult.isSuccess()) {
           const enhancedResult = taskResult.getValue();
@@ -728,6 +782,248 @@ export class BrowserExecutionService implements ExecutionService {
       default:
         return 'Review task configuration and try alternative approach';
     }
+  }
+
+  // TaskQueue integration helper methods
+  private convertToStrategicTask(task: Task): StrategicTask {
+    return {
+      id: task.getId().toString(),
+      name: task.getDescription(),
+      description: task.getDescription(),
+      intent: this.mapIntentToStrategic(task.getIntent()),
+      targetConcept: this.extractTargetConcept(task),
+      expectedOutcome: this.buildExpectedOutcome(task),
+      inputData: this.extractInputData(task),
+      dependencies: [],
+      maxAttempts: task.getMaxRetries(),
+      priority: this.getPriorityValue(task.getPriority()),
+      acceptableOutcomes: this.defineAcceptableOutcomes(task),
+      requiredEvidence: this.defineRequiredEvidence(task.getIntent()),
+      optionalEvidence: this.defineOptionalEvidence(task.getIntent()),
+      minSuccessConfidence: this.getConfidenceThreshold(task),
+      allowPartialSuccess: this.allowsPartialSuccess(task)
+    };
+  }
+
+  private mapIntentToStrategic(intent: any): StrategicTask['intent'] {
+    const intentMap: Record<string, StrategicTask['intent']> = {
+      'Search': 'search',
+      'Navigate': 'navigate',
+      'Extract': 'extract',
+      'Authenticate': 'authenticate',
+      'Filter': 'filter',
+      'Verify': 'verify',
+      'Interact': 'interact'
+    };
+    
+    const intentStr = intent?.toString() || 'interact';
+    return intentMap[intentStr] || 'interact';
+  }
+
+  private extractTargetConcept(task: Task): string {
+    const description = task.getDescription().toLowerCase();
+    const conceptPatterns = [
+      /(?:click|select|find|locate)\s+(.+)/,
+      /(?:enter|type|fill)\s+.+\s+(?:in|into)\s+(.+)/,
+      /(?:extract|get|capture)\s+(.+)/
+    ];
+    
+    for (const pattern of conceptPatterns) {
+      const match = description.match(pattern);
+      if (match) return match[1];
+    }
+    
+    return task.getDescription();
+  }
+
+  private buildExpectedOutcome(task: Task): string {
+    const intent = task.getIntent()?.toString() || 'interact';
+    const description = task.getDescription();
+    
+    const outcomeTemplates: Record<string, string> = {
+      'search': `Search completed with query entered`,
+      'navigate': `Navigation to target page successful`,
+      'extract': `Data extracted from ${description}`,
+      'authenticate': `Authentication completed successfully`,
+      'filter': `Filters applied as specified`,
+      'verify': `Verification completed: ${description}`,
+      'interact': `Interaction completed: ${description}`
+    };
+    
+    return outcomeTemplates[intent] || `Task completed: ${description}`;
+  }
+
+  private extractInputData(task: Task): any {
+    return (task as any).inputData || undefined;
+  }
+
+  private defineAcceptableOutcomes(task: Task): string[] {
+    const intent = task.getIntent()?.toString() || 'interact';
+    
+    const outcomesMap: Record<string, string[]> = {
+      'search': ['results displayed', 'no results found', 'search suggestions shown'],
+      'navigate': ['page loaded', 'redirected to login', 'navigation completed'],
+      'extract': ['data captured', 'partial data captured', 'no data available'],
+      'authenticate': ['login successful', 'already authenticated'],
+      'filter': ['filters applied', 'results updated', 'no matches found'],
+      'verify': ['condition met', 'condition not met', 'verification completed'],
+      'interact': ['action completed', 'element updated', 'state changed']
+    };
+    
+    return outcomesMap[intent] || ['task completed'];
+  }
+
+  private defineRequiredEvidence(intent: any): string[] {
+    const intentStr = intent?.toString() || 'interact';
+    const evidenceMap: Record<string, string[]> = {
+      'search': ['search_input_filled', 'search_submitted'],
+      'navigate': ['page_loaded', 'url_changed'],
+      'extract': ['data_captured', 'elements_found'],
+      'authenticate': ['login_successful', 'session_established'],
+      'filter': ['filter_applied', 'results_updated'],
+      'verify': ['condition_checked', 'assertion_passed'],
+      'interact': ['element_clicked', 'action_completed']
+    };
+    
+    return evidenceMap[intentStr] || ['action_completed'];
+  }
+
+  private defineOptionalEvidence(intent: any): string[] {
+    const intentStr = intent?.toString() || 'interact';
+    const optionalMap: Record<string, string[]> = {
+      'search': ['autocomplete_shown', 'search_history_displayed'],
+      'navigate': ['page_title_changed', 'breadcrumb_updated'],
+      'extract': ['all_fields_found', 'validation_passed'],
+      'authenticate': ['remember_me_checked', 'two_factor_completed'],
+      'filter': ['count_updated', 'url_params_changed'],
+      'verify': ['screenshot_captured', 'comparison_logged'],
+      'interact': ['animation_completed', 'feedback_shown']
+    };
+    
+    return optionalMap[intentStr] || [];
+  }
+
+  private isHighPriority(priority: any): boolean {
+    if (typeof (priority as any).isHigh === 'function') {
+      return (priority as any).isHigh();
+    }
+    return this.getPriorityValue(priority) >= 7;
+  }
+
+  private getPriorityValue(priority: any): number {
+    if (typeof (priority as any).getValue === 'function') {
+      return (priority as any).getValue();
+    }
+    if (typeof (priority as any).value === 'number') {
+      return (priority as any).value;
+    }
+    return 5;
+  }
+
+  private getConfidenceThreshold(task: Task): number {
+    const priority = this.getPriorityValue(task.getPriority());
+    if (priority >= 8) return 0.9;
+    if (priority >= 5) return 0.7;
+    return 0.5;
+  }
+
+  private allowsPartialSuccess(task: Task): boolean {
+    const intent = task.getIntent()?.toString() || 'interact';
+    const priority = this.getPriorityValue(task.getPriority());
+    
+    return intent === 'extract' && priority < 7;
+  }
+
+  private async optimizeForHighPriority(_task: Task): Promise<void> {
+    // Implementation for high-priority task optimization
+    // This could include pre-loading page elements, optimizing browser settings, etc.
+    await new Promise(resolve => setTimeout(resolve, 100)); // Simulate optimization work
+  }
+
+  private async executeWithQueue(
+    step: Step, 
+    context: ExecutionContext, 
+    queue: TaskQueue, 
+    config: StepExecutionConfig
+  ): Promise<Result<{ stepId: string; success: boolean; taskResults: TaskResult[]; confidence: number; }>> {
+    const taskResults: TaskResult[] = [];
+    let allTasksSucceeded = true;
+
+    // Execute ready tasks from queue
+    const readyTasks = queue.getReadyTasks();
+    
+    for (const strategicTask of readyTasks) {
+      const task = this.findTaskById(strategicTask.id, step);
+      if (!task) continue;
+
+      const taskContext: TaskExecutionContext = {
+        currentUrl: context.getCurrentUrl(),
+        viewport: context.getViewport(),
+        pageState: context.getPageState() || PageState.create({
+          url: context.getCurrentUrl(),
+          title: 'Unknown',
+          html: '',
+          elements: [],
+          loadTime: 0
+        }),
+        availableActions: this.getAvailableActions(context),
+        previousActions: this.getPreviousActions(context),
+        timeRemaining: config.timeout.duration
+      };
+
+      const taskResult = await this.executeTask(task, taskContext, config, queue);
+      
+      if (taskResult.isSuccess()) {
+        const enhancedResult = taskResult.getValue();
+        const baseResult = {
+          taskId: enhancedResult.taskId,
+          success: enhancedResult.success,
+          timestamp: enhancedResult.timestamp,
+          data: enhancedResult.data
+        };
+
+        if (enhancedResult.error) {
+          (baseResult as any).error = enhancedResult.error;
+        }
+        if (enhancedResult.duration) {
+          (baseResult as any).duration = enhancedResult.duration;
+        }
+
+        taskResults.push(baseResult);
+        
+        if (!enhancedResult.success) {
+          allTasksSucceeded = false;
+        }
+      } else {
+        allTasksSucceeded = false;
+        taskResults.push({
+          taskId: task.getId().toString(),
+          success: false,
+          duration: 0,
+          timestamp: new Date(),
+          error: taskResult.getError()
+        });
+      }
+    }
+
+    // Complete the step
+    const stepCompletionResult = step.complete();
+    if (stepCompletionResult.isFailure()) {
+      return Result.fail(`Failed to complete step: ${stepCompletionResult.getError()}`);
+    }
+
+    const stepResult = {
+      stepId: step.getId().toString(),
+      success: allTasksSucceeded,
+      taskResults,
+      confidence: this.calculateStepConfidence(taskResults)
+    };
+
+    return Result.ok(stepResult as any);
+  }
+
+  private findTaskById(taskId: string, step: Step): Task | undefined {
+    return step.getTasks().find(task => task.getId().toString() === taskId);
   }
 }
 

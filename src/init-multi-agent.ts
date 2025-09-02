@@ -1,10 +1,7 @@
 import { AgentFactory, AgentInfrastructure } from './core/factories/agent-factory';
 import { WorkflowManager } from './core/services/workflow-manager';
-import { WorkflowMonitor } from './core/services/workflow-monitor';
-import { StateManager } from './core/services/state-manager';
-import { TaskQueue } from './core/services/task-queue';
 import { MultiAgentConfig } from './core/types/agent-types';
-import { Variable } from './core/entities/variable';
+import { Variable } from './core/value-objects/variable';
 import { 
   DeploymentEnvironment, 
   DeploymentConfig, 
@@ -69,6 +66,37 @@ export interface InitMultiAgentConfig extends MultiAgentConfig {
    * @default 'MultiAgent'
    */
   reporterName?: string;
+
+  // Phase 5: Integration feature toggles
+  /**
+   * Enable domain services integration
+   * @default true
+   */
+  enableDomainServices?: boolean;
+  
+  /**
+   * Enable repository pattern support
+   * @default true
+   */
+  enableRepositories?: boolean;
+  
+  /**
+   * Enable TaskQueue integration for dependency management
+   * @default true
+   */
+  enableQueueIntegration?: boolean;
+  
+  /**
+   * Enable StateManager integration for state tracking and checkpoints
+   * @default true
+   */
+  enableStateIntegration?: boolean;
+  
+  /**
+   * Enable WorkflowMonitor integration for comprehensive observability
+   * @default true
+   */
+  enableMonitorIntegration?: boolean;
 }
 
 /**
@@ -85,20 +113,26 @@ export function initMultiAgent(config: InitMultiAgentConfig): WorkflowManager {
   // Initialize infrastructure components
   const infrastructure = initializeInfrastructure(config);
   
-  // Create workflow manager with all agents
-  const workflowManager = AgentFactory.createOptimizedAgents(config, infrastructure);
-  
-  // Initialize monitoring and observability
-  new WorkflowMonitor(infrastructure.eventBus, infrastructure.reporter);
-  
-  // Set up state management for future use
-  new StateManager(infrastructure.browser, infrastructure.domService);
-  
-  // Set up task queue for dependency management
-  new TaskQueue();
+  // Create workflow manager with full integration support
+  const workflowManager = AgentFactory.createWorkflowManagerWithFullIntegration(
+    config,
+    infrastructure,
+    {
+      enableDomainServices: config.enableDomainServices ?? true,
+      enableRepositories: config.enableRepositories ?? true,
+      enableQueueIntegration: config.enableQueueIntegration ?? true,
+      enableStateIntegration: config.enableStateIntegration ?? true,
+      enableMonitorIntegration: config.enableMonitorIntegration ?? true
+    }
+  );
   
   if (config.verbose) {
-    infrastructure.reporter.info('🏗️ Multi-agent system initialized successfully');
+    infrastructure.reporter.info('🏗️ Multi-agent system initialized with full DDD integration');
+    infrastructure.reporter.info(`✅ TaskQueue: ${config.enableQueueIntegration !== false ? 'Enabled' : 'Disabled'} for dependency resolution`);
+    infrastructure.reporter.info(`✅ StateManager: ${config.enableStateIntegration !== false ? 'Enabled' : 'Disabled'} for state tracking and checkpoints`);
+    infrastructure.reporter.info(`✅ WorkflowMonitor: ${config.enableMonitorIntegration !== false ? 'Enabled' : 'Disabled'} for comprehensive metrics`);
+    infrastructure.reporter.info(`✅ Domain Services: ${config.enableDomainServices !== false ? 'Enabled' : 'Disabled'} for enhanced planning and execution`);
+    infrastructure.reporter.info(`✅ Repositories: ${config.enableRepositories !== false ? 'Enabled' : 'Disabled'} for data persistence`);
     infrastructure.reporter.info(`📊 Configuration: ${JSON.stringify({
       models: config.models,
       maxRetries: config.maxRetries,
@@ -161,10 +195,10 @@ export function createCustomWorkflowManager(
     headless: false,
     variables: [],
     models: {
-      planner: 'gpt-4o-mini',
-      executor: 'gpt-4o-mini',
-      evaluator: 'gpt-4o-mini',
-      errorHandler: 'gpt-4o-mini'
+      planner: 'gpt-5-nano',
+      executor: 'gpt-5-nano',
+      evaluator: 'gpt-5-nano',
+      errorHandler: 'gpt-5-nano'
     },
     maxRetries: 3,
     timeout: 300000,
@@ -250,7 +284,7 @@ export function initMultiAgentWithCustomConfig(
 export { WorkflowManager } from './core/services/workflow-manager';
 export { AgentFactory } from './core/factories/agent-factory';
 export { MultiAgentConfig, WorkflowResult } from './core/types/agent-types';
-export { Variable } from './core/entities/variable';
+export { Variable } from './core/value-objects/variable';
 export { 
   DeploymentEnvironment, 
   DeploymentConfig,

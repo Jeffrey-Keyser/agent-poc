@@ -180,6 +180,10 @@ export class ActionType {
     return new ActionType('capture-screenshot');
   }
 
+  static scroll(): ActionType {
+    return new ActionType('scroll-down');
+  }
+
   getValue(): ActionTypeValue {
     return this.value;
   }

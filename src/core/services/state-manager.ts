@@ -2,8 +2,9 @@ import { PageState } from '../types/agent-types';
 import { Browser } from '../interfaces/browser.interface';
 import { DomService } from '@/infra/services/dom-service';
 import { truncateForLogging } from '../shared/utils';
+import { EventEmitter } from 'events';
 
-export class StateManager {
+export class StateManager extends EventEmitter {
   private stateHistory: PageState[] = [];
   private currentState: PageState | null = null;
   private extractedData: Map<string, any> = new Map();
@@ -13,7 +14,9 @@ export class StateManager {
   constructor(
     private browser: Browser,
     private domService: DomService
-  ) {}
+  ) {
+    super();
+  }
 
   async captureState(): Promise<PageState> {
     const domState = await this.domService.getInteractiveElements();
@@ -32,6 +35,15 @@ export class StateManager {
 
     this.stateHistory.push(state);
     this.currentState = state;
+    
+    // Phase 3: Emit state captured event for monitoring
+    this.emit('state:captured', {
+      url: state.url,
+      sectionsCount: state.visibleSections.length,
+      actionsCount: state.availableActions.length,
+      timestamp: new Date()
+    });
+    
     return state;
   }
 
@@ -304,6 +316,13 @@ export class StateManager {
       this.extractedData.set(key, value);
       this.persistentData.set(key, value);
       console.log(`📝 Added extracted data - ${key}: ${truncateForLogging(value, 100)}`);
+      
+      // Phase 3: Emit data extraction event for monitoring
+      this.emit('data:extracted', {
+        keys: [key],
+        itemCount: 1,
+        timestamp: new Date()
+      });
     }
   }
 
@@ -312,12 +331,23 @@ export class StateManager {
    * Used when receiving extracted data from TaskExecutor
    */
   mergeExtractedData(data: Record<string, any>): void {
-    for (const [key, value] of Object.entries(data)) {
-      if (value !== null && value !== undefined && value !== '') {
-        this.extractedData.set(key, value);
-        this.persistentData.set(key, value);
-        console.log(`📝 Merged extracted data - ${key}: ${truncateForLogging(value, 100)}`);
-      }
+    const validEntries = Object.entries(data).filter(([, value]) => 
+      value !== null && value !== undefined && value !== ''
+    );
+    
+    for (const [key, value] of validEntries) {
+      this.extractedData.set(key, value);
+      this.persistentData.set(key, value);
+      console.log(`📝 Merged extracted data - ${key}: ${truncateForLogging(value, 100)}`);
+    }
+    
+    // Phase 3: Emit data extraction event for monitoring (batch)
+    if (validEntries.length > 0) {
+      this.emit('data:extracted', {
+        keys: validEntries.map(([key]) => key),
+        itemCount: validEntries.length,
+        timestamp: new Date()
+      });
     }
   }
 
@@ -354,6 +384,13 @@ export class StateManager {
         extractedData: this.getAllExtractedData()
       });
       console.log(`💾 Created checkpoint: ${name}`);
+      
+      // Phase 3: Emit checkpoint created event for monitoring
+      this.emit('checkpoint:created', {
+        name,
+        checkpointCount: this.checkpoints.size,
+        timestamp: new Date()
+      });
     }
   }
 

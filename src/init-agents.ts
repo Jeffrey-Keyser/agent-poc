@@ -37,10 +37,10 @@ export function initAgents(config: UnifiedAgentConfig): WorkflowManager {
     variables: config.variables ?? [],
     apiKey: config.apiKey || '', // For backward compatibility
     models: config.models ?? {
-      planner: 'gpt-4o-mini',
-      executor: 'gpt-4o-mini',
-      evaluator: 'gpt-4o-mini',
-      errorHandler: 'gpt-4o-mini'
+      planner: 'gpt-5-nano',
+      executor: 'gpt-5-nano',
+      evaluator: 'gpt-5-nano',
+      errorHandler: 'gpt-5-nano'
     },
     maxRetries: config.maxRetries ?? 3,
     timeout: config.timeout ?? 300000,

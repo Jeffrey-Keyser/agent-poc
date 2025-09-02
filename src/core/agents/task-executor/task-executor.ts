@@ -6,7 +6,7 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { JsonOutputParser } from '@langchain/core/output_parsers';
 import { TASK_EXECUTOR_PROMPT } from './task-executor.prompt';
 import { DomService, isTextNode } from '../../../infra/services/dom-service';
-import { VariableString } from '../../entities/variable-string';
+import { VariableString } from '../../value-objects/variable-string';
 
 /**
  * TaskExecutorAgent - Executes strategic tasks by decomposing them into micro-actions

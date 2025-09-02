@@ -31,7 +31,7 @@ export {
 /**
  * Export entities and classes
  */
-export { Variable } from './core/entities/variable';
+export { Variable } from './core/value-objects/variable';
 
 /**
  * Export multi-agent system classes and types (Phase 4)

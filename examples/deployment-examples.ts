@@ -13,8 +13,7 @@ import { ChatOpenAI } from '../src/models/chat-openai';
 // Initialize LLM (shared across examples)
 const llm = new ChatOpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
-  model: 'gpt-4o-mini',
-  temperature: 0.1
+  model: 'gpt-5-nano'
 });
 
 /**

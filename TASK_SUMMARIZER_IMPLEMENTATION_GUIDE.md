@@ -661,7 +661,7 @@ Update the initialization to include the summarizer:
 // Create the summarizer if configured
 const summarizer = AgentFactory.createSummarizer({
     llm,
-    model: config.models?.summarizer || 'gpt-4o-mini',
+    model: config.models?.summarizer || 'gpt-5-nano',
     maxRetries: config.maxRetries || 3,
     includeRecommendations: true,
     maxSummaryLength: 500
@@ -693,7 +693,7 @@ Add to your workflow configuration:
 ```typescript
 {
   models: {
-    summarizer: 'gpt-4o-mini'       // Model to use for summarization
+    summarizer: 'gpt-5-nano'       // Model to use for summarization
   },
   summarizerConfig: {
     includeRecommendations: true,   // Generate optimization tips

@@ -1,4 +1,4 @@
-import { VariableString } from '@/core/entities/variable-string';
+import { VariableString } from '@/core/value-objects/variable-string';
 import { Browser } from '@/core/interfaces/browser.interface';
 import { convertHtmlToMarkdown } from 'dom-to-semantic-markdown';
 import { JSDOM } from 'jsdom';

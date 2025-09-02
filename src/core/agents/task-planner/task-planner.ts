@@ -64,7 +64,10 @@ export class TaskPlannerAgent implements ITaskPlanner {
     const parser = new JsonOutputParser<{ strategy: any[] }>();
     const response = await this.llm.invokeAndParse(messages, parser);
     
+    console.log('[TaskPlanner] Raw LLM response:', JSON.stringify(response, null, 2));
+    
     const strategicTasks = this.parseStrategicTasks(response.strategy);
+    console.log('[TaskPlanner] Parsed strategic tasks:', JSON.stringify(strategicTasks, null, 2));
     
     const output: PlannerOutput = {
       id: this.generateId(),
@@ -216,34 +219,53 @@ Your response must be valid JSON in the format specified in the system prompt.
   }
 
   private parseStrategicTasks(strategy: any[]): StrategicTask[] {
-    return strategy.map((step, index) => ({
-      id: `task-${this.generateId()}-${index + 1}`,
-      name: step.description || `Step ${step.step}`,
-      description: step.description || '',
-      intent: step.intent || 'interact',
-      targetConcept: step.targetConcept || 'page element',
-      inputData: step.inputData,
-      expectedOutcome: step.expectedResult || step.expectedOutcome || '',
-      dependencies: [],
-      maxAttempts: 3,
-      priority: step.step || index + 1
-    }));
+    return strategy.map((step, index) => {
+      const stepNumber = step.step || (index + 1);
+      const description = step.description || `Step ${stepNumber}`;
+      
+      return {
+        id: `task-${this.generateId()}-${index + 1}`,
+        name: description,
+        description: description,
+        intent: step.intent || 'interact',
+        targetConcept: step.targetConcept || 'page element',
+        inputData: step.inputData,
+        expectedOutcome: step.expectedOutcome || step.expectedResult || `Complete step: ${description}`,
+        dependencies: [],
+        maxAttempts: 3,
+        priority: typeof stepNumber === 'number' ? stepNumber : (index + 1)
+      };
+    });
   }
 
   private validateStrategicTask(task: StrategicTask): boolean {
     const validIntents = ['search', 'filter', 'navigate', 'extract', 'authenticate', 'verify', 'interact'];
-    return !!(
-      task &&
-      typeof task.id === 'string' &&
-      typeof task.name === 'string' &&
-      typeof task.description === 'string' &&
-      validIntents.includes(task.intent) &&
-      typeof task.targetConcept === 'string' &&
-      typeof task.expectedOutcome === 'string' &&
-      Array.isArray(task.dependencies) &&
-      typeof task.maxAttempts === 'number' &&
-      typeof task.priority === 'number'
-    );
+    
+    if (!task) {
+      console.warn('[TaskPlanner] Validation failed: task is null/undefined');
+      return false;
+    }
+    
+    const validations = [
+      { check: typeof task.id === 'string', field: 'id', value: task.id },
+      { check: typeof task.name === 'string', field: 'name', value: task.name },
+      { check: typeof task.description === 'string', field: 'description', value: task.description },
+      { check: validIntents.includes(task.intent), field: 'intent', value: task.intent },
+      { check: typeof task.targetConcept === 'string', field: 'targetConcept', value: task.targetConcept },
+      { check: typeof task.expectedOutcome === 'string', field: 'expectedOutcome', value: task.expectedOutcome },
+      { check: Array.isArray(task.dependencies), field: 'dependencies', value: task.dependencies },
+      { check: typeof task.maxAttempts === 'number', field: 'maxAttempts', value: task.maxAttempts },
+      { check: typeof task.priority === 'number', field: 'priority', value: task.priority }
+    ];
+    
+    for (const validation of validations) {
+      if (!validation.check) {
+        console.warn(`[TaskPlanner] Validation failed for field '${validation.field}':`, validation.value);
+        return false;
+      }
+    }
+    
+    return true;
   }
 
   private generateId(): string {

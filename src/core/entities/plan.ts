@@ -1,6 +1,7 @@
 import { PlanId, WorkflowId, StepId } from '../value-objects';
 import { Result } from './result';
 import { Step } from './step';
+import { DomainEvent, PlanCreatedEvent } from '../domain-events';
 
 export class Plan {
   private readonly id: PlanId;
@@ -8,6 +9,7 @@ export class Plan {
   private currentStepIndex: number = 0;
   private readonly createdAt: Date;
   private updatedAt: Date;
+  private readonly domainEvents: DomainEvent[] = [];
 
   constructor(
     id: PlanId,
@@ -21,6 +23,13 @@ export class Plan {
     
     // Validate steps are in correct order
     this.validateStepOrder();
+    
+    // Record plan creation event
+    this.recordEvent(new PlanCreatedEvent(
+      this.workflowId,
+      this.id,
+      steps.length
+    ));
   }
 
   // Static factory method for creating plans
@@ -262,5 +271,18 @@ export class Plan {
       progress: this.getProgress(),
       isComplete: this.isComplete()
     };
+  }
+
+  // Domain events support
+  getDomainEvents(): ReadonlyArray<DomainEvent> {
+    return this.domainEvents;
+  }
+
+  private recordEvent(event: DomainEvent): void {
+    this.domainEvents.push(event);
+  }
+
+  clearDomainEvents(): void {
+    this.domainEvents.splice(0, this.domainEvents.length);
   }
 }
