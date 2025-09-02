@@ -21,23 +21,17 @@ import { TaskQueue } from './task-queue';
 import { MemoryService, MemoryContext } from './memory-service';
 import { VariableManager } from './variable-manager';
 import { truncateExtractedData } from '../shared/utils';
-
-// Phase 4: Import Domain Services
 import { 
   PlanningService, 
   ExecutionService, 
   EvaluationService,
   PlanningContext
 } from '../domain-services';
-
-// Phase 6: Import Domain Events Bridge
 import { 
   WorkflowEventBus,
   WorkflowEventBusFactory
 } from './domain-event-bridge';
 import { DomainEvent } from '../domain-events';
-
-// Phase 6: Import Event Handlers and Event Store
 import { 
   EventHandlerFactory,
   WorkflowMetricsHandler,
@@ -47,15 +41,11 @@ import {
 } from '../../infrastructure/event-handlers';
 import { InMemoryEventStore, IEventStore } from '../domain-events';
 import { WorkflowSaga, SagaFactory } from '../sagas';
-
-// Phase 5: Import Repository interfaces
 import {
   WorkflowRepository,
   PlanRepository,
   MemoryRepository
 } from '../repositories';
-
-// Phase 2 & 3: Import DDD entities, value objects, and aggregates
 import {
   Workflow,
   Plan,
@@ -97,26 +87,20 @@ export interface WorkflowManagerConfig {
   allowEarlyExit?: boolean;           // Can workflow exit with partial results?
   minAcceptableCompletion?: number;   // Minimum % completion to exit early (default 60)
   criticalSteps?: string[];           // Step IDs that must complete
-  // Phase 1: TaskQueue Integration
   taskQueue?: any; // TaskQueue type
   enableQueueIntegration?: boolean;
-  // Phase 2: StateManager Integration  
   stateManager?: StateManager;
   enableStateIntegration?: boolean;
-  // Phase 3: WorkflowMonitor Integration
   workflowMonitor?: any; // WorkflowMonitor type
   enableMonitorIntegration?: boolean;
-  // Phase 4: Domain Services
   planningService?: PlanningService;
   executionService?: ExecutionService;
   evaluationService?: EvaluationService;
-  // Phase 5: Repository dependencies
   workflowRepository?: WorkflowRepository;
   planRepository?: PlanRepository;
   memoryRepository?: MemoryRepository;
 }
 
-// Phase 2: StateManager integration interfaces
 interface StateChangeAnalysis {
   requiresReplanning: boolean;
   reason: string;
@@ -163,14 +147,11 @@ function sanitizeForLogging(obj: any): any {
 }
 
 export class WorkflowManager {
-  // Phase 3: Replace procedural logic with Aggregates
   private workflowAggregate: WorkflowAggregate | null = null;
   private executionAggregate: ExecutionAggregate | null = null;
   
-  // Phase 1: TaskQueue Integration
   private taskQueue: TaskQueue;
   
-  // Legacy properties maintained for backward compatibility
   private workflow: Workflow | null = null;
   private currentPlan: Plan | null = null;
   private currentGoal: string = '';
@@ -184,20 +165,17 @@ export class WorkflowManager {
   private summarizer?: ITaskSummarizer;
   private errors: string[] = [];
   
-  // Phase 4: Domain Services (injected dependencies)
   private planningService: PlanningService | undefined;
   // TODO: Future enhancement - integrate execution service for task execution
   // private executionService: ExecutionService | undefined;
   // TODO: Future enhancement - integrate evaluation service for result evaluation  
   // private evaluationService: EvaluationService | undefined;
 
-  // Phase 5: Repository dependencies
   private workflowRepository: WorkflowRepository | undefined;
   private planRepository: PlanRepository | undefined;
   // TODO: Future enhancement - integrate memory repository with MemoryService
   // private memoryRepository: MemoryRepository | undefined;
 
-  // Phase 6: Domain Events support
   private workflowEventBus: WorkflowEventBus;
   private metricsHandler: WorkflowMetricsHandler;
   private loggingHandler: WorkflowLoggingHandler;
@@ -206,7 +184,6 @@ export class WorkflowManager {
   private eventStore: IEventStore;
   private workflowSaga: WorkflowSaga;
   
-  // Phase 2: Legacy properties for Phase 4 implementation
   // private replanAttemptsPerStep: Map<string, number> = new Map();
   // private failedApproaches: Map<string, string[]> = new Map();
   // private maxReplansPerStep: number = 3; // Configurable limit
@@ -232,12 +209,9 @@ export class WorkflowManager {
       criticalSteps: [],
       ...config
     };
-    // Phase 2: Commenting out for now
     // this.maxReplansPerStep = this.config.maxReplansPerStep || 3;
     
-    // Phase 1: Initialize TaskQueue and setup event listeners
     this.taskQueue = config.taskQueue || new TaskQueue();
-    
     this.stateManager = new StateManager(browser, domService);
     this.memoryService = new MemoryService(this.eventBus);
     this.variableManager = config.variableManager || new VariableManager();
@@ -250,29 +224,24 @@ export class WorkflowManager {
       this.setupTaskQueueEventListeners();
     }
     
-    // Phase 3: Setup StateManager event listeners for enhanced monitoring
     if (config.enableStateIntegration !== false) {
       this.setupStateManagerEventListeners();
     }
     
-    // Phase 3: Connect domain events to WorkflowMonitor if available
     if (config.enableMonitorIntegration !== false) {
       this.connectDomainEventsToMonitor();
     }
     
-    // Phase 4: Initialize domain services
     this.planningService = config.planningService;
     // TODO: Future enhancement - uncomment when implementing execution/evaluation services
     // this.executionService = config.executionService;
     // this.evaluationService = config.evaluationService;
     
-    // Phase 5: Initialize repositories
     this.workflowRepository = config.workflowRepository;
     this.planRepository = config.planRepository;
     // TODO: Future enhancement - uncomment when integrating memory repository
     // this.memoryRepository = config.memoryRepository;
 
-    // Phase 6: Initialize domain events bridge and handlers
     this.workflowEventBus = WorkflowEventBusFactory.create(this.eventBus);
     this.eventStore = new InMemoryEventStore();
     
@@ -327,7 +296,6 @@ export class WorkflowManager {
     return Session.create(sessionId, workflowId, browserConfig);
   }
 
-  // Phase 3: Factory method to create workflow aggregate (with valid plan)
   private createWorkflowAggregate(workflow: Workflow, plan: Plan): Result<WorkflowAggregate> {
     // Create session entity
     const sessionResult = this.createSession(workflow.getId());
@@ -352,7 +320,6 @@ export class WorkflowManager {
     return aggregateResult;
   }
 
-  // Phase 3: Factory method to create execution aggregate
   private createExecutionAggregate(): Result<ExecutionAggregate> {
     if (!this.workflow) {
       return Result.fail('Workflow must exist before creating execution aggregate');
@@ -378,7 +345,6 @@ export class WorkflowManager {
       return Result.fail(`Failed to create execution aggregate: ${aggregateResult.getError()}`);
     }
 
-    // Phase 2: Configure ExecutionAggregate with StateManager
     const executionAggregate = aggregateResult.getValue();
     if (this.config.enableStateIntegration !== false) {
       executionAggregate.setStateManager(this.stateManager);
@@ -387,8 +353,6 @@ export class WorkflowManager {
     return Result.ok(executionAggregate);
   }
 
-
-  // Phase 2: Convert strategic plan output to Plan entity with Step entities
   private convertToPlanEntity(plannerOutput: any): Result<Plan> {
     if (!this.workflow) {
       return Result.fail('Workflow must be created before plan');
@@ -553,7 +517,6 @@ export class WorkflowManager {
     this.reporter.log(`🚀 Starting workflow: ${goal}`);
     
     try {
-      // Phase 1: Create workflow and session first (without aggregate)
       const initialUrl = startUrl || 'https://amazon.com';
       
       // Get variables from variable manager as Value Objects
@@ -566,7 +529,6 @@ export class WorkflowManager {
       }
       this.workflow = workflowResult.getValue();
       
-      // Phase 5: Save workflow to repository
       if (this.workflowRepository) {
         try {
           await this.workflowRepository.save(this.workflow);
@@ -586,7 +548,6 @@ export class WorkflowManager {
       // Get current URL after browser launch
       const currentUrl = this.browser.getPageUrl();
       
-      // Phase 4: Use domain planning service if available, otherwise fallback to legacy planner
       let newPlan: Plan;
       
       if (this.planningService) {
@@ -621,7 +582,6 @@ export class WorkflowManager {
         
         this.reporter.log(`✅ Planner returned ${plannerOutput.strategy.length} strategic steps`);
         
-        // Phase 3: Convert strategic plan to Plan entity and update aggregate
         const planResult = this.convertToPlanEntity(plannerOutput);
         if (planResult.isFailure()) {
           throw new Error(`Failed to create plan: ${planResult.getError()}`);
@@ -629,7 +589,6 @@ export class WorkflowManager {
         newPlan = planResult.getValue();
       }
       
-      // Phase 5: Save plan to repository
       if (this.planRepository) {
         try {
           await this.planRepository.save(newPlan);
@@ -648,7 +607,6 @@ export class WorkflowManager {
       this.workflowAggregate = aggregateResult.getValue();
       this.currentPlan = newPlan;
       
-      // Phase 3: Create Execution Aggregate (now that we have the workflow)
       const executionAggregateResult = this.createExecutionAggregate();
       if (executionAggregateResult.isFailure()) {
         throw new Error(`Failed to create execution aggregate: ${executionAggregateResult.getError()}`);
@@ -701,11 +659,9 @@ export class WorkflowManager {
       }
       this.reporter.log(`📋 Strategic plan created with ${this.currentPlan.getSteps().length} steps`);
       
-      // Phase 1: Clear queue for new workflow execution
       this.taskQueue.clear();
       this.reporter.log(`📊 TaskQueue cleared for new workflow execution`);
       
-      // Phase 3: Execute using WorkflowAggregate
       // Track which steps have been successfully completed
       const successfullyCompletedSteps: StrategicTask[] = [];
       
@@ -807,7 +763,6 @@ export class WorkflowManager {
               }
             }
             
-            // Phase 2: Check for state changes that might require replanning after successful task
             if (this.config.enableReplanning) {
               const replanRequired = await this.checkForReplanning();
               if (replanRequired) {
@@ -864,7 +819,6 @@ export class WorkflowManager {
               this.reporter.log(`⚠️ Task failed and max retries (${task.getMaxRetries()}) reached. Moving to next step...`);
             }
             
-            // Phase 2: State-aware replanning implementation
             if (this.config.enableReplanning) {
               const replanRequired = await this.checkForReplanning();
               if (replanRequired) {
@@ -898,7 +852,6 @@ export class WorkflowManager {
         }
       }
       
-      // Phase 3: Complete workflow using aggregate
       if (this.workflowAggregate) {
         const status = this.workflowAggregate.getExecutionStatus();
         if (status.completionPercentage >= 100) {
@@ -910,7 +863,6 @@ export class WorkflowManager {
           if (completionResult.isSuccess()) {
             this.reporter.log('✅ Workflow completed successfully');
             
-            // Phase 5: Update workflow in repository
             if (this.workflowRepository && this.workflow) {
               try {
                 await this.workflowRepository.update(this.workflow);
@@ -945,7 +897,6 @@ export class WorkflowManager {
             this.workflowAggregate.failExecution(`Workflow execution stopped with minimal progress: ${successfulSteps}/${totalSteps} steps completed`);
           }
           
-          // Phase 5: Update workflow in repository
           if (this.workflowRepository && this.workflow) {
             try {
               await this.workflowRepository.update(this.workflow);
@@ -957,7 +908,6 @@ export class WorkflowManager {
         }
       }
       
-      // Phase 1: Final queue metrics reporting
       this.reporter.log(`📊 Final Queue Metrics: ${this.taskQueue.getAllTasks().length} total tasks processed`);
       
       await this.publishEntityEvents();
@@ -1134,7 +1084,6 @@ export class WorkflowManager {
     return await this.stateManager.captureState();
   }
 
-  // Phase 2: State-aware replanning functionality
   private async checkForReplanning(): Promise<boolean> {
     if (!this.stateManager) return false;
     
@@ -1246,7 +1195,6 @@ export class WorkflowManager {
     const endTime = new Date();
     const duration = this.startTime ? endTime.getTime() - this.startTime.getTime() : 0;
     
-    // Phase 3: Use aggregate data when available
     let completionPercentage = 0;
     let workflowStatus: WorkflowResult['status'] = 'failure';
     let workflowId = `workflow-${Date.now()}`;
@@ -1314,7 +1262,7 @@ export class WorkflowManager {
     // Get all accumulated data
     const allExtractedData = this.stateManager.getAllExtractedData();
     
-    // Base result object with Phase 3 aggregate data
+    // Base result object with aggregate data
     const baseResult = {
       id: workflowId,
       goal: workflowGoal,
@@ -1340,7 +1288,6 @@ export class WorkflowManager {
       extractedData: allExtractedData,
       summary: `Workflow completed with ${completionPercentage.toFixed(1)}% progress`,
       errors: this.errors,
-      // Phase 3: Aggregate execution data
       executionStatistics: executionStats,
       aggregateMetrics: this.workflowAggregate ? {
         workflowStatus: this.workflowAggregate.getExecutionStatus().workflowStatus,
@@ -1423,7 +1370,6 @@ export class WorkflowManager {
     this.eventBus.emit(event, data);
   }
 
-  // Phase 6: Domain events publication
   private async publishEntityEvents(): Promise<void> {
     const allEvents: DomainEvent[] = [];
 
@@ -1484,7 +1430,7 @@ export class WorkflowManager {
     }
   }
 
-  // Phase 4: Domain Service Integration Methods
+  // Domain Service Integration Methods
   
   /**
    * Creates a plan using the domain planning service
@@ -1631,7 +1577,7 @@ export class WorkflowManager {
   }
 
   /**
-   * Phase 1: Setup TaskQueue event listeners for monitoring integration
+   * Setup TaskQueue event listeners for monitoring integration
    */
   private setupTaskQueueEventListeners(): void {
     // Listen to task queue events and bridge them to the event bus
@@ -1672,7 +1618,7 @@ export class WorkflowManager {
   }
   
   /**
-   * Phase 3: Setup StateManager event listeners for monitoring integration
+   * Setup StateManager event listeners for monitoring integration
    */
   private setupStateManagerEventListeners(): void {
     // Listen to StateManager events and bridge them to the event bus
@@ -1693,7 +1639,7 @@ export class WorkflowManager {
   }
   
   /**
-   * Phase 3: Connect domain events to WorkflowMonitor through EventBus bridge
+   * Connect domain events to WorkflowMonitor through EventBus bridge
    */
   private connectDomainEventsToMonitor(): void {
     // Domain entity events (if using domain events from entities)
