@@ -173,7 +173,6 @@ export interface WorkflowResult {
 
 // Multi-agent system configuration
 export interface MultiAgentConfig {
-  apiKey: string;
   headless?: boolean;
   variables?: any[]; // Variable type from existing system
   models?: {

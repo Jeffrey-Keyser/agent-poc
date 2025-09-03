@@ -33,7 +33,6 @@ async function main() {
     llm,
     headless: false,
     variables,
-    apiKey: process.env.OPENAI_API_KEY!,
     models: {
       planner: 'gpt-5-mini',
       executor: 'gpt-5-mini', 
@@ -41,8 +40,7 @@ async function main() {
       errorHandler: 'gpt-5-mini'
     },
     maxRetries: 3,
-    timeout: 300000, // 5 minutes
-    startUrl: 'https://amazon.com',
+    timeout: 300000,
     verbose: true,
     reporterName: 'AmazonWorkflow'
   });
@@ -51,7 +49,8 @@ async function main() {
     console.log('🚀 Starting Amazon multi-agent workflow...');
     
     const searchResult = await workflow.executeWorkflow(
-      'Search Amazon for dark roast caffeinated coffee beans and return the URL of the first coffee package that has a rating of 4.5 or higher, is ~$25.00, in stock and is a dark roast. Don\'t utilize filters on the list page.'
+      'Search Amazon for dark roast caffeinated coffee beans and return the URL of the first coffee package that has a rating of 4.5 or higher, is ~$25.00, in stock and is a dark roast. Don\'t utilize filters on the list page.',
+      'https://amazon.com'    
     );
     
     console.log('📊 Search Results:', searchResult);

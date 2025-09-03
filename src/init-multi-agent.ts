@@ -1,4 +1,5 @@
-import { AgentFactory, AgentInfrastructure } from './core/factories/agent-factory';
+import { AgentInfrastructure } from './core/factories/agent-factory';
+import { WorkflowFactory } from './core/factories/workflow-factory';
 import { WorkflowManager } from './core/services/workflow-manager';
 import { MultiAgentConfig } from './core/types/agent-types';
 import { Variable } from './core/value-objects/variable';
@@ -34,7 +35,7 @@ export interface InitMultiAgentConfig extends MultiAgentConfig {
   
   /**
    * Optional start URL for browser initialization
-   * @default 'https://amazon.com'
+   * @default 'https://google.com'
    */
   startUrl?: string;
   
@@ -71,13 +72,22 @@ export interface InitMultiAgentConfig extends MultiAgentConfig {
  */
 export function initMultiAgent(config: InitMultiAgentConfig): WorkflowManager {
   const infrastructure = initializeInfrastructure(config);
-  const workflowManager = AgentFactory.createWorkflowManagerWithFullIntegration(
-    config,
-    infrastructure,
-  );
+  const workflowManager = WorkflowFactory.create({
+    llm: config.llm,
+    ...(config.models && { models: config.models }),
+    browser: {
+      headless: config.headless ?? false,
+      ...(config.viewport && { viewport: config.viewport })
+    },
+    ...(config.maxRetries !== undefined && { maxRetries: config.maxRetries }),
+    ...(config.timeout !== undefined && { timeout: config.timeout }),
+    enableReplanning: true,
+    ...(config.verbose !== undefined && { verbose: config.verbose }),
+    ...(config.reporterName && { reporterName: config.reporterName })
+  }, infrastructure);
   
   if (config.verbose) {
-    infrastructure.reporter.info('🏗️ Multi-agent system initialized with full DDD integration');
+    infrastructure.reporter.info('🏗️ Multi-agent system initialized with simplified factory');
     infrastructure.reporter.info(`📊 Configuration: ${JSON.stringify({
       models: config.models,
       maxRetries: config.maxRetries,

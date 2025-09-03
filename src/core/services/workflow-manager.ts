@@ -1,10 +1,4 @@
 import { 
-  ITaskPlanner, 
-  ITaskExecutor, 
-  ITaskEvaluator,
-  PlannerInput,
-  ExecutorInput,
-  EvaluatorInput,
   StrategicTask,
   StrategicPlan,
   StepResult,
@@ -20,7 +14,6 @@ import { StateManager } from './state-manager';
 import { TaskQueue } from './task-queue';
 import { MemoryService, MemoryContext } from './memory-service';
 import { VariableManager } from './variable-manager';
-import { truncateExtractedData } from '../shared/utils';
 import { 
   PlanningService, 
   ExecutionService, 
@@ -49,26 +42,18 @@ import {
 import {
   Workflow,
   Plan,
-  Step,
-  Task,
   Result,
   Session,
   ExecutionContext
 } from '../entities';
 import {
   WorkflowId,
-  PlanId,
-  StepId,
-  TaskId,
   Variable,
   Url,
-  Confidence,
-  Priority,
-  Intent,
   SessionId,
   Viewport,
-  PageState as PageStateVO,
-  Evidence
+  Evidence,
+  PageState as PageStateVO
 } from '../value-objects';
 import {
   WorkflowAggregate,
@@ -87,12 +72,6 @@ export interface WorkflowManagerConfig {
   minAcceptableCompletion?: number;
   criticalSteps?: string[];
   stateManager?: StateManager;
-  planningService?: PlanningService;
-  executionService?: ExecutionService;
-  evaluationService?: EvaluationService;
-  workflowRepository?: WorkflowRepository;
-  planRepository?: PlanRepository;
-  memoryRepository?: MemoryRepository;
 }
 
 interface StateChangeAnalysis {
@@ -100,45 +79,6 @@ interface StateChangeAnalysis {
   reason: string;
 }
 
-/**
- * Sanitizes objects for logging by removing screenshot data
- * to prevent excessive log file sizes.
- */
-function sanitizeForLogging(obj: any): any {
-  if (obj === null || obj === undefined) {
-    return obj;
-  }
-  
-  if (typeof obj !== 'object') {
-    return obj;
-  }
-  
-  if (Array.isArray(obj)) {
-    return obj.map(item => sanitizeForLogging(item));
-  }
-  
-  const sanitized: any = {};
-  
-  for (const key in obj) {
-    if (obj.hasOwnProperty(key)) {
-      // Omit screenshot fields
-      if (key === 'screenshot' || key === 'pristineScreenshot' || key === 'highlighted') {
-        sanitized[key] = '[SCREENSHOT_OMITTED]';
-      } else if (key === 'screenshots' && typeof obj[key] === 'object') {
-        // Handle screenshots object
-        sanitized[key] = {};
-        for (const screenshotKey in obj[key]) {
-          sanitized[key][screenshotKey] = '[SCREENSHOT_OMITTED]';
-        }
-      } else {
-        // Recursively sanitize nested objects
-        sanitized[key] = sanitizeForLogging(obj[key]);
-      }
-    }
-  }
-  
-  return sanitized;
-}
 
 export class WorkflowManager {
   private workflowAggregate: WorkflowAggregate | null = null;
@@ -155,17 +95,9 @@ export class WorkflowManager {
   private extractedData: any = {};
   private stateManager: StateManager;
   private memoryService: MemoryService;
-  private variableManager: VariableManager;
   private summarizer?: ITaskSummarizer;
   private errors: string[] = [];
   
-  private planningService: PlanningService | undefined;
-  // private executionService: ExecutionService | undefined;
-  // private evaluationService: EvaluationService | undefined;
-
-  private workflowRepository: WorkflowRepository | undefined;
-  private planRepository: PlanRepository | undefined;
-  // private memoryRepository: MemoryRepository | undefined;
 
   private workflowEventBus: WorkflowEventBus;
   private metricsHandler: WorkflowMetricsHandler;
@@ -175,14 +107,14 @@ export class WorkflowManager {
   private eventStore: IEventStore;
   private workflowSaga: WorkflowSaga;
   
-  // private replanAttemptsPerStep: Map<string, number> = new Map();
-  // private failedApproaches: Map<string, string[]> = new Map();
-  // private maxReplansPerStep: number = 3; // Configurable limit
 
   constructor(
-    private planner: ITaskPlanner,
-    private executor: ITaskExecutor,
-    private evaluator: ITaskEvaluator,
+    private planningService: PlanningService,
+    private executionService: ExecutionService,
+    private evaluationService: EvaluationService,
+    private workflowRepository: WorkflowRepository,
+    private planRepository: PlanRepository,
+    private memoryRepository: MemoryRepository,
     private eventBus: EnhancedEventBusInterface,
     private browser: Browser,
     private domService: DomService,
@@ -199,12 +131,10 @@ export class WorkflowManager {
       criticalSteps: [],
       ...config
     };
-    // this.maxReplansPerStep = this.config.maxReplansPerStep || 3;
     
     this.taskQueue =  new TaskQueue();
-    this.stateManager = new StateManager(browser, domService);
-    this.memoryService = new MemoryService(this.eventBus);
-    this.variableManager = config.variableManager || new VariableManager();
+    this.stateManager = new StateManager(this.browser, this.domService);
+    this.memoryService = new MemoryService(this.eventBus, this.memoryRepository);
     if (config.summarizer) {
       this.summarizer = config.summarizer;
     }
@@ -213,15 +143,7 @@ export class WorkflowManager {
     this.setupStateManagerEventListeners();
     this.connectDomainEventsToMonitor();
     
-    this.planningService = config.planningService;
-    // TODO: Future enhancement - uncomment when implementing execution/evaluation services
-    // this.executionService = config.executionService;
-    // this.evaluationService = config.evaluationService;
-    
-    this.workflowRepository = config.workflowRepository;
-    this.planRepository = config.planRepository;
-    // TODO: Future enhancement - uncomment when integrating memory repository
-    // this.memoryRepository = config.memoryRepository;
+    // Services are now directly injected as constructor parameters
 
     this.workflowEventBus = WorkflowEventBusFactory.create(this.eventBus);
     this.eventStore = new InMemoryEventStore();
@@ -246,7 +168,6 @@ export class WorkflowManager {
     this.reporter.log('📡 Domain event handlers registered: metrics, logging, task-failure, workflow-stuck, saga');
   }
 
-  // Factory method to create workflow entity
   private createWorkflow(goal: string, startUrl: string, variables: Variable[] = []): Result<Workflow> {
     const workflowId = WorkflowId.generate();
     const urlResult = Url.create(startUrl);
@@ -265,7 +186,6 @@ export class WorkflowManager {
     return Result.ok(workflow);
   }
 
-  // Factory method to create session entity
   private createSession(workflowId: WorkflowId): Result<Session> {
     const sessionId = SessionId.generate();
     const browserConfig = {
@@ -331,163 +251,8 @@ export class WorkflowManager {
     return Result.ok(executionAggregate);
   }
 
-  private convertToPlanEntity(plannerOutput: any): Result<Plan> {
-    if (!this.workflow) {
-      return Result.fail('Workflow must be created before plan');
-    }
 
-    // Defensive check: Ensure planner output has strategy array
-    if (!plannerOutput || !plannerOutput.strategy || !Array.isArray(plannerOutput.strategy)) {
-      return Result.fail('Planner output must contain a valid strategy array');
-    }
 
-    // Defensive check: Ensure strategy has at least one step
-    if (plannerOutput.strategy.length === 0) {
-      return Result.fail('Planner strategy must contain at least one step');
-    }
-
-    this.reporter.log(`🔍 Converting ${plannerOutput.strategy.length} strategic tasks to plan entities`);
-
-    const planId = PlanId.generate();
-    const workflowId = this.workflow.getId();
-    
-    // Convert strategic tasks to Step entities
-    const steps: Step[] = [];
-    for (let i = 0; i < plannerOutput.strategy.length; i++) {
-      const strategicTask = plannerOutput.strategy[i];
-      
-      // Validate strategic task structure
-      if (!strategicTask || typeof strategicTask.description !== 'string' || !strategicTask.description.trim()) {
-        return Result.fail(`Strategic task ${i + 1} must have a valid description`);
-      }
-      
-      const stepId = StepId.generate();
-      const confidence = Confidence.create(80); // Default confidence
-      
-      if (!confidence.isSuccess()) {
-        return Result.fail(`Failed to create confidence: ${confidence.getError()}`);
-      }
-      
-      const stepResult = Step.create(
-        stepId,
-        strategicTask.description,
-        i + 1, // order
-        confidence.getValue()
-      );
-      
-      if (stepResult.isFailure()) {
-        return Result.fail(`Failed to create step ${i + 1}: ${stepResult.getError()}`);
-      }
-      
-      const step = stepResult.getValue();
-      
-      // Convert strategic task to Task entity and add to step
-      const taskResult = this.convertStrategicTaskToTaskEntity(strategicTask);
-      if (taskResult.isFailure()) {
-        return Result.fail(`Failed to convert strategic task to task entity: ${taskResult.getError()}`);
-      }
-      
-      const addTaskResult = step.addTask(taskResult.getValue());
-      if (addTaskResult.isFailure()) {
-        return Result.fail(`Failed to add task to step: ${addTaskResult.getError()}`);
-      }
-      
-      steps.push(step);
-    }
-    
-    // Create the plan
-    return Plan.create(planId, workflowId, steps);
-  }
-
-  // Map strategic intent to Task entity intent
-  private mapStrategicIntentToTaskIntent(strategicIntent: string): string {
-    // Map strategic-level intents to browser-action intents
-    const intentMapping: Record<string, string> = {
-      'search': 'type',        // Searching involves typing in a search box
-      'filter': 'click',       // Filtering involves clicking filter options
-      'interact': 'click',     // General interaction is usually clicking
-      'authenticate': 'fill',  // Authentication involves filling forms
-      'navigate': 'navigate',  // Direct mapping
-      'extract': 'extract',    // Direct mapping
-      'verify': 'verify'       // Direct mapping
-    };
-    
-    const normalized = strategicIntent.toLowerCase().trim();
-    const mappedIntent = intentMapping[normalized] || 'click'; // Default to 'click' for unknown intents
-    
-    if (intentMapping[normalized]) {
-      this.reporter.log(`🔄 Mapped intent: ${strategicIntent} → ${mappedIntent}`);
-    } else {
-      this.reporter.log(`⚠️ Unknown strategic intent '${strategicIntent}', defaulting to 'click'`);
-    }
-    
-    return mappedIntent;
-  }
-
-  // Convert a StrategicTask to a Task entity
-  private convertStrategicTaskToTaskEntity(strategicTask: StrategicTask): Result<Task> {
-    const taskId = TaskId.generate();
-    
-    // Map strategic intent to Task entity intent
-    const mappedIntent = this.mapStrategicIntentToTaskIntent(strategicTask.intent);
-    
-    // Create Intent value object with mapped intent
-    const intent = Intent.create(mappedIntent);
-    if (!intent.isSuccess()) {
-      return Result.fail(`Invalid intent: ${intent.getError()}`);
-    }
-    
-    // Create Priority value object based on strategic task priority
-    const priority = strategicTask.priority <= 2 ? Priority.high() : 
-                    strategicTask.priority <= 4 ? Priority.medium() : 
-                    Priority.low();
-    
-    // Create Task entity
-    return Task.create(
-      taskId,
-      intent.getValue(),
-      strategicTask.description,
-      priority,
-      strategicTask.maxAttempts || 3,
-      30000 // 30 second timeout
-    );
-  }
-
-  // Convert a Task entity back to StrategicTask for legacy compatibility
-  private convertTaskToStrategicTask(task: Task, _step: Step): StrategicTask {
-    // Map Intent values to StrategicTask intents
-    const intentMapping: Record<string, StrategicTask['intent']> = {
-      'click': 'interact',
-      'fill': 'interact', 
-      'type': 'interact',
-      'submit': 'interact',
-      'select': 'interact',
-      'hover': 'interact',
-      'scroll': 'interact',
-      'extract': 'extract',
-      'capture': 'extract',
-      'verify': 'verify',
-      'navigate': 'navigate',
-      'wait': 'interact'
-    };
-    
-    const taskIntent = task.getIntent().getValue();
-    const strategicIntent = intentMapping[taskIntent] || 'interact';
-    
-    return {
-      id: task.getId().toString(),
-      name: task.getDescription(),
-      description: task.getDescription(),
-      intent: strategicIntent,
-      targetConcept: 'page element', // Default
-      inputData: null,
-      expectedOutcome: task.getDescription(),
-      dependencies: [],
-      maxAttempts: task.getMaxRetries() + 1,
-      priority: task.getPriority().isHigh() ? 1 : 
-                task.getPriority().isMedium() ? 3 : 5
-    };
-  }
 
   async executeWorkflow(goal: string, startUrl?: string): Promise<WorkflowResult> {
     this.startTime = new Date();
@@ -505,74 +270,27 @@ export class WorkflowManager {
       }
       this.workflow = workflowResult.getValue();
       
-      if (this.workflowRepository) {
-        try {
-          await this.workflowRepository.save(this.workflow);
-          this.reporter.log(`💾 Workflow saved to repository: ${this.workflow.getId().toString()}`);
-        } catch (error) {
-          this.reporter.log(`⚠️ Failed to save workflow to repository: ${error}`);
-        }
-      }
+      await this.workflowRepository.save(this.workflow);
+      this.reporter.log(`💾 Workflow saved to repository: ${this.workflow.getId().toString()}`);
       
-      // Initialize browser with start URL
       await this.browser.launch(initialUrl);
       this.reporter.log(`🌐 Browser launched at: ${initialUrl}`);
-      
-      // Emit workflow started event
       this.emitWorkflowEvent('workflow:started', { goal });
       
-      // Get current URL after browser launch
       const currentUrl = this.browser.getPageUrl();
       
       let newPlan: Plan;
       
-      if (this.planningService) {
-        // Use domain service for planning
-        const planResult = await this.createPlanWithDomainService(goal, currentUrl);
-        if (planResult.isFailure()) {
-          throw new Error(`Domain planning failed: ${planResult.getError()}`);
-        }
-        newPlan = planResult.getValue();
-        this.reporter.log(`📋 Domain service created plan with ${newPlan.getSteps().length} steps`);
-      } else {
-        // Fallback to legacy planning
-        const currentState = await this.captureSemanticState();
-        const plannerInput: PlannerInput = {
-          goal,
-          currentUrl,
-          constraints: [],
-          currentState // NEW: Include current page state with screenshots
-        };
-        
-        const plannerOutput = await this.planner.execute(plannerInput);
-        this.reporter.log(`🔍 Legacy planner output: ${JSON.stringify(sanitizeForLogging(plannerOutput), null, 2)}`);
-        
-        // Defensive check: Validate planner output before conversion
-        if (!plannerOutput) {
-          throw new Error('Planner returned null or undefined output');
-        }
-        
-        if (!plannerOutput.strategy || !Array.isArray(plannerOutput.strategy) || plannerOutput.strategy.length === 0) {
-          throw new Error('Planner returned empty or invalid strategy. The planner must return at least one strategic step.');
-        }
-        
-        this.reporter.log(`✅ Planner returned ${plannerOutput.strategy.length} strategic steps`);
-        
-        const planResult = this.convertToPlanEntity(plannerOutput);
-        if (planResult.isFailure()) {
-          throw new Error(`Failed to create plan: ${planResult.getError()}`);
-        }
-        newPlan = planResult.getValue();
+      // Direct domain service usage - no conditionals
+      const planResult = await this.createPlanWithDomainService(goal, currentUrl);
+      if (planResult.isFailure()) {
+        throw new Error(`Domain planning failed: ${planResult.getError()}`);
       }
+      newPlan = planResult.getValue();
+      this.reporter.log(`📋 Domain service created plan with ${newPlan.getSteps().length} steps`);
       
-      if (this.planRepository) {
-        try {
-          await this.planRepository.save(newPlan);
-          this.reporter.log(`💾 Plan saved to repository: ${newPlan.getId().toString()}`);
-        } catch (error) {
-          this.reporter.log(`⚠️ Failed to save plan to repository: ${error}`);
-        }
-      }
+      await this.planRepository.save(newPlan);
+      this.reporter.log(`💾 Plan saved to repository: ${newPlan.getId().toString()}`);
       
       // Now create the workflow aggregate with the valid plan
       const aggregateResult = this.createWorkflowAggregate(this.workflow, newPlan);
@@ -596,43 +314,25 @@ export class WorkflowManager {
         throw new Error(`Failed to start workflow execution: ${startResult.getError()}`);
       }
       
-      // Keep legacy strategy for backward compatibility when using legacy planner
-      if (!this.planningService) {
-        const plannerOutput = await this.planner.execute({
-          goal,
-          currentUrl,
-          constraints: [],
-          currentState: await this.captureSemanticState()
-        });
-        
-        this.currentStrategy = {
-          id: plannerOutput.id,
-          goal: plannerOutput.goal,
-          steps: plannerOutput.strategy,
-          createdAt: plannerOutput.createdAt,
-          currentStepIndex: plannerOutput.currentStepIndex
-        };
-      } else {
-        // Create a minimal strategy for domain service path
-        this.currentStrategy = {
-          id: `domain-strategy-${Date.now()}`,
-          goal,
-          steps: newPlan.getSteps().map((step, index) => ({
-            id: step.getId().toString(),
-            name: step.getDescription(),
-            description: step.getDescription(),
-            intent: 'interact' as const,
-            targetConcept: step.getDescription(),
-            priority: index + 1,
-            confidence: step.getConfidence().getValue(),
-            expectedOutcome: step.getDescription(),
-            dependencies: [],
-            maxAttempts: 3
-          })),
-          createdAt: new Date(),
-          currentStepIndex: 0
-        };
-      }
+      // Create strategy from domain service plan
+      this.currentStrategy = {
+        id: `domain-strategy-${Date.now()}`,
+        goal,
+        steps: newPlan.getSteps().map((step, index) => ({
+          id: step.getId().toString(),
+          name: step.getDescription(),
+          description: step.getDescription(),
+          intent: 'interact' as const,
+          targetConcept: step.getDescription(),
+          priority: index + 1,
+          confidence: step.getConfidence().getValue(),
+          expectedOutcome: step.getDescription(),
+          dependencies: [],
+          maxAttempts: 3
+        })),
+        createdAt: new Date(),
+        currentStepIndex: 0
+      };
       this.reporter.log(`📋 Strategic plan created with ${this.currentPlan.getSteps().length} steps`);
       
       this.taskQueue.clear();
@@ -656,7 +356,6 @@ export class WorkflowManager {
           this.taskQueue.cleanupCompletedTasks();
         }
         
-        // CRITICAL: Execute next step using queue - note async call with await
         const stepExecutionResult = await this.workflowAggregate!.executeNextStep();
         if (stepExecutionResult.isFailure()) {
           this.reporter.log(`No more steps to execute: ${stepExecutionResult.getError()}`);
@@ -678,27 +377,81 @@ export class WorkflowManager {
             continue;
           }
           
-          // Execute the task using legacy method for now
-          const strategicTask = this.convertTaskToStrategicTask(task, currentStep);
-          const executionResult = await this.executeStrategicStep(strategicTask);
+          this.reporter.log(`⚡ Executing task: ${task.getDescription()}`);
+          const taskStartTime = Date.now();
           
-          // Create task result
-          const taskResult = {
-            taskId: task.getId().toString(),
-            success: executionResult.success,
-            duration: executionResult.duration,
-            timestamp: new Date(),
-            data: executionResult.evidence?.extractedData,
-            ...(executionResult.errorReason && { error: executionResult.errorReason })
-          };
+          try {
+            // Create execution context for the task
+            const currentState = await this.captureSemanticState();
+            const currentUrlObj = Url.create(this.browser.getPageUrl()).getValue();
+            const viewport = Viewport.create(1920, 1080).getValue();
+            
+            // Convert PageState to domain PageState
+            const domainPageState = PageStateVO.create({
+              url: currentUrlObj,
+              title: currentState.title || 'Current Page', 
+              html: '',
+              elements: [],
+              loadTime: 0
+            });
+            
+            const executionContext = {
+              currentUrl: currentUrlObj,
+              viewport: viewport,
+              pageState: domainPageState,
+              availableActions: currentState.availableActions,
+              previousActions: []
+            };
+            
+            // Use execution service directly
+            const executionResult = await this.executionService.executeTask(task, executionContext);
+            
+            if (executionResult.isFailure()) {
+              throw new Error(executionResult.getError());
+            }
+            
+            const result = executionResult.getValue();
+            
+            // Use evaluation service to assess the execution
+            const evaluationContext = {
+              originalGoal: this.currentGoal,
+              currentUrl: currentUrlObj,
+              pageState: domainPageState,
+              workflowId: this.workflow?.getId(),
+              executionContext: this.executionAggregate?.getContext(),
+              timeConstraints: 30000
+            };
+            
+            const evaluationResult = await this.evaluationService.evaluateTaskCompletion(
+              task, 
+              result.evidence, 
+              evaluationContext
+            );
+            
+            const taskExecutionResult = {
+              success: evaluationResult.isSuccess(),
+              duration: Date.now() - taskStartTime,
+              evidence: {
+                extractedData: result.evidence ? result.evidence.map(e => e.getData()) : []
+              },
+              errorReason: evaluationResult.isFailure() ? evaluationResult.getError() : undefined
+            };
           
-          // Record execution using ExecutionAggregate
-          const evidence = executionResult.evidence ? 
-            Evidence.create(
-              'screenshot', // Evidence type
-              JSON.stringify(executionResult.evidence),
-              { source: 'task-execution', description: 'Task execution evidence' }
-            ).getValue() : undefined;
+            const taskResult = {
+              taskId: task.getId().toString(),
+              success: taskExecutionResult.success,
+              duration: taskExecutionResult.duration,
+              timestamp: new Date(),
+              data: taskExecutionResult.evidence?.extractedData,
+              ...(taskExecutionResult.errorReason && { error: taskExecutionResult.errorReason })
+            };
+            
+            const evidence = taskExecutionResult.evidence ? 
+              Evidence.create(
+                'screenshot',
+                JSON.stringify(taskExecutionResult.evidence),
+                { source: 'domain-service-execution', description: 'Domain service task execution' }
+              ).getValue() : undefined;
           
           const recordResult = await this.executionAggregate!.recordExecution(
             task,
@@ -711,33 +464,34 @@ export class WorkflowManager {
             this.reporter.log(`Failed to record execution: ${recordResult.getError()}`);
           }
           
-          if (executionResult.success) {
-            successfullyCompletedSteps.push(strategicTask);
+            if (taskExecutionResult.success) {
+              // Create a strategic task for tracking (minimal conversion for legacy tracking)
+              const strategicTask = {
+                id: task.getId().toString(),
+                name: task.getDescription(),
+                description: task.getDescription(),
+                intent: 'interact' as const,
+                targetConcept: 'page element',
+                inputData: null,
+                expectedOutcome: task.getDescription(),
+                dependencies: [],
+                maxAttempts: task.getMaxRetries() + 1,
+                priority: 1
+              };
+              
+              successfullyCompletedSteps.push(strategicTask);
+              this.reporter.log(`✅ Task completed: ${task.getDescription()}`);
             
-            // Update execution context if we have new page state
-            if (executionResult.evidence?.afterState) {
+              // Update execution context
               try {
                 const currentUrlString = this.browser.getPageUrl();
                 const urlResult = Url.create(currentUrlString);
                 if (urlResult.isSuccess()) {
                   this.executionAggregate!.updateCurrentUrl(urlResult.getValue());
-                  
-                  // Update page state in execution context
-                  const pageState = PageStateVO.create({
-                    url: urlResult.getValue(),
-                    title: 'Updated Page State',
-                    html: '',
-                    elements: [], // Use empty array since visibleElements doesn't exist on PageState
-                    loadTime: 0
-                  });
-                  
-                  this.executionAggregate!.updatePageState(pageState);
                 }
               } catch (error) {
-                // Log but don't fail - context updates are not critical
                 this.reporter.log(`Warning: Failed to update execution context: ${error}`);
               }
-            }
             
             if (this.config.enableReplanning) {
               const replanRequired = await this.checkForReplanning();
@@ -757,31 +511,36 @@ export class WorkflowManager {
                 return await this.buildWorkflowResult();
               }
             }
-          } else {
+            } else {
+              // Handle task failure with retry logic
+              this.reporter.log(`❌ Task failed: ${task.getDescription()}`);
+              throw new Error(taskExecutionResult.errorReason || 'Task execution failed');
+            }
+            
+          } catch (error) {
             // Handle task failure with retry logic
             const beforeState = await this.captureSemanticState();
             const context: MemoryContext = {
               url: this.browser.getPageUrl(),
-              taskGoal: strategicTask.description,
+              taskGoal: task.getDescription(),
               pageSection: beforeState.visibleSections[0]
             };
             
             // Record what failed for future reference
             this.memoryService.addLearning(
               context,
-              `Task "${strategicTask.description}" failed: ${executionResult.errorReason}`,
+              `Task "${task.getDescription()}" failed: ${error}`,
               {
-                actionToAvoid: strategicTask.description,
+                actionToAvoid: task.getDescription(),
                 alternativeAction: 'Try different approach or selector',
                 confidence: 0.8
               }
             );
             
-            // Check if task can be retried before failing the workflow
+            // Check if task can be retried
             if (task.canRetry()) {
               this.reporter.log(`🔄 Task failed but can retry: ${task.getRetryCount()}/${task.getMaxRetries()} attempts. Retrying...`);
               
-              // Mark task for retry
               const retryResult = task.retry();
               if (retryResult.isSuccess()) {
                 continue;
@@ -800,17 +559,14 @@ export class WorkflowManager {
               }
             }
             
-            // Instead of failing the entire workflow, continue to the next step if possible
-            this.reporter.log(`⚠️ Step "${currentStep.getDescription()}" failed, but continuing workflow execution...`);
-            
             // Mark current step as failed but don't terminate workflow
-            const stepFailResult = currentStep.fail(`Task failed: ${executionResult.errorReason || 'Unknown error'}`);
+            const stepFailResult = currentStep.fail(`Task failed: ${error instanceof Error ? error.message : String(error)}`);
             if (stepFailResult.isFailure()) {
               this.reporter.log(`Warning: Failed to mark step as failed: ${stepFailResult.getError()}`);
             }
             
             // Continue to next step instead of terminating workflow
-            break; // Break out of task loop to move to next step
+            break;
           }
         }
         
@@ -835,14 +591,8 @@ export class WorkflowManager {
           if (completionResult.isSuccess()) {
             this.reporter.log('✅ Workflow completed successfully');
             
-            if (this.workflowRepository && this.workflow) {
-              try {
-                await this.workflowRepository.update(this.workflow);
-                this.reporter.log(`💾 Completed workflow updated in repository: ${this.workflow.getId().toString()}`);
-              } catch (error) {
-                this.reporter.log(`⚠️ Failed to update completed workflow in repository: ${error}`);
-              }
-            }
+            await this.workflowRepository.update(this.workflow!);
+            this.reporter.log(`💾 Completed workflow updated in repository: ${this.workflow!.getId().toString()}`);
           } else {
             this.reporter.log(`⚠️ Failed to mark workflow as complete: ${completionResult.getError()}`);
           }
@@ -869,14 +619,8 @@ export class WorkflowManager {
             this.workflowAggregate.failExecution(`Workflow execution stopped with minimal progress: ${successfulSteps}/${totalSteps} steps completed`);
           }
           
-          if (this.workflowRepository && this.workflow) {
-            try {
-              await this.workflowRepository.update(this.workflow);
-              this.reporter.log(`💾 Workflow updated in repository: ${this.workflow.getId().toString()}`);
-            } catch (error) {
-              this.reporter.log(`⚠️ Failed to update workflow in repository: ${error}`);
-            }
-          }
+          await this.workflowRepository.update(this.workflow!);
+          this.reporter.log(`💾 Workflow updated in repository: ${this.workflow!.getId().toString()}`);
         }
       }
       
@@ -894,162 +638,6 @@ export class WorkflowManager {
     }
   }
 
-  private async executeStrategicStep(step: StrategicTask): Promise<StepResult> {
-    this.emitWorkflowEvent('step:started', { step });
-    this.reporter.log(`⚡ Executing: ${step.description}`);
-    
-    const startTime = Date.now();
-    
-    try {
-      // Capture state with screenshots before execution
-      const beforeState = await this.captureSemanticState();
-      
-      // Get full DOM state for executor
-      const domState = await this.domService.getInteractiveElements();
-      
-      // NEW: Get memory context
-      const memoryContext: MemoryContext = {
-        url: this.browser.getPageUrl(),
-        taskGoal: step.description,
-        pageSection: beforeState.visibleSections[0] // Primary section
-      };
-      
-      // NEW: Add memory and variable manager to executor input
-      const executorInput: ExecutorInput = {
-        task: step,
-        pageState: beforeState,
-        screenshots: {
-          pristine: domState.pristineScreenshot,
-          highlighted: domState.screenshot
-        },
-        memoryLearnings: await this.memoryService.getMemoryPrompt(memoryContext),
-        variableManager: this.variableManager
-      };
-
-      this.reporter.log(`🔍 Executor input: ${JSON.stringify(sanitizeForLogging(executorInput))}`);
-      
-      const execution = await this.executor.execute(executorInput);
-      
-      // Capture state with screenshots after execution
-      // IMPORTANT: Use executor's finalState if it contains extracted data
-      let afterState: PageState;
-      
-      if (execution.finalState?.extractedData && 
-          Object.keys(execution.finalState.extractedData).length > 0) {
-        // Use the executor's state which contains extracted data
-        afterState = execution.finalState;
-        
-        // Merge instead of individual adds to ensure persistence
-        this.stateManager.mergeExtractedData(execution.finalState.extractedData);
-        
-        // Create checkpoint after successful extraction
-        this.stateManager.createCheckpoint(`step_${step.id}_complete`);
-        
-        this.reporter.log(`📊 Using extracted data from executor: ${JSON.stringify(truncateExtractedData(execution.finalState.extractedData))}`);
-      } else {
-        // Fall back to capturing new state if no extracted data
-        afterState = await this.captureSemanticState();
-      }
-      
-      // Update workflow extractedData with merged data from StateManager
-      this.extractedData = this.stateManager.getAllExtractedData();
-      
-      // Log the accumulated data
-      if (Object.keys(this.extractedData).length > 0) {
-        this.reporter.log(`📊 Accumulated extracted data: ${JSON.stringify(truncateExtractedData(this.extractedData))}`);
-      }
-      
-      // MODIFIED: Pass screenshots to evaluator
-      const evaluatorInput: EvaluatorInput = {
-        step,
-        beforeState: beforeState,
-        afterState: afterState,
-        microActions: execution.microActions,
-        results: execution.results,
-        screenshots: {
-          before: beforeState.pristineScreenshot || '',
-          after: afterState.pristineScreenshot || ''
-        }
-      };
-      
-      this.reporter.log(`🔍 Evaluator input: ${JSON.stringify(sanitizeForLogging(evaluatorInput), null, 2)}`);
-      
-      const evaluation = await this.evaluator.execute(evaluatorInput);
-      this.reporter.log(`🔍 Evaluator output: ${JSON.stringify(sanitizeForLogging(evaluation), null, 2)}`);
-      
-      // Debug logging for extraction data flow
-      if (step.intent === 'extract') {
-        this.reporter.log(`🔍 Debug - Extraction Task Results:`);
-        this.reporter.log(`  - Executor returned data: ${execution.finalState?.extractedData ? 'YES' : 'NO'}`);
-        this.reporter.log(`  - Data keys: ${Object.keys(execution.finalState?.extractedData || {}).join(', ')}`);
-        this.reporter.log(`  - AfterState has data: ${afterState.extractedData ? 'YES' : 'NO'}`);
-        this.reporter.log(`  - AfterState keys: ${Object.keys(afterState.extractedData || {}).join(', ')}`);
-      }
-      
-      const stepResult: StepResult = {
-        stepId: step.id,
-        success: evaluation.success,
-        status: evaluation.success ? 'success' : 'failure',
-        microActions: execution.microActions,
-        evidence: {
-          beforeState,
-          afterState,
-          extractedData: afterState.extractedData
-        },
-        errorReason: evaluation.reason,
-        duration: Date.now() - startTime,
-        attempts: 1
-      };
-      
-      if (evaluation.success) {
-        this.memoryService.learnFromSuccess(
-          memoryContext,
-          `${step.intent}: ${step.description}`,
-          evaluation.evidence
-        );
-      } else {
-        this.memoryService.learnFromFailure(
-          memoryContext,
-          `${step.intent}: ${step.description}`,
-          evaluation.reason,
-          evaluation.suggestions?.[0]
-        );
-      }
-      
-      // Store result
-      this.completedSteps.set(step.id, stepResult);
-      
-      const status = stepResult.status === 'success' ? '✅' : '❌';
-      this.reporter.log(`${status} ${step.description} (${stepResult.duration}ms)`);
-      
-      this.emitWorkflowEvent('step:completed', { 
-        step, 
-        result: stepResult,
-        microActions: execution.microActions 
-      });
-      
-      return stepResult;
-      
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.errors.push(`Step ${step.id}: ${errorMessage}`);
-      const stepResult: StepResult = {
-        stepId: step.id,
-        success: false,
-        status: 'failure',
-        microActions: [],
-        evidence: {},
-        errorReason: error instanceof Error ? error.message : String(error),
-        duration: Date.now() - startTime,
-        attempts: 1
-      };
-      
-      this.completedSteps.set(step.id, stepResult);
-      this.emitWorkflowEvent('step:failed', { step, result: stepResult });
-      
-      return stepResult;
-    }
-  }
 
   private async captureSemanticState(): Promise<PageState> {
     // Use StateManager which now captures screenshots
@@ -1122,34 +710,28 @@ export class WorkflowManager {
         checkpoints: this.stateManager.getCheckpointNames()
       };
 
-      // Create replanning request with proper PlannerInput format
-      const replanRequest: PlannerInput = {
+      // Use domain planning service for replanning
+      const planningContext: PlanningContext = {
         goal: this.currentGoal,
-        currentUrl: stateContext.currentUrl,
-        constraints: [],
-        currentState: {
-          url: stateContext.currentUrl,
-          title: '',
-          visibleSections: stateContext.visibleSections,
-          availableActions: stateContext.availableActions,
-          extractedData: stateContext.extractedData
-        }
+        url: stateContext.currentUrl,
+        existingPageState: (currentState as any).pageContent,
+        previousAttempts: [], // Could be populated from memory service
+        availableActions: stateContext.availableActions,
+        userInstructions: this.currentGoal,
+        timeConstraints: this.config.timeout || 300000
       };
-
-      // Use planner to create new plan with state context
-      const plannerOutput = await this.planner.execute(replanRequest);
       
-      if (plannerOutput && plannerOutput.strategy && plannerOutput.strategy.length > 0) {
-        this.reporter.log(`📋 Created new plan with ${plannerOutput.strategy.length} steps based on current state`);
-        
-        // Convert strategic plan to Plan entity
-        const planResult = this.convertToPlanEntity(plannerOutput);
-        if (planResult.isFailure()) {
-          this.reporter.log(`❌ Failed to convert plan: ${planResult.getError()}`);
-          return null;
-        }
-        
-        return planResult.getValue();
+      if (this.workflow) {
+        planningContext.workflowId = this.workflow.getId();
+      }
+
+      const planResult = await this.planningService.createPlan(this.currentGoal, planningContext);
+      if (planResult.isSuccess()) {
+        const plan = planResult.getValue();
+        this.reporter.log(`📋 Domain service created new plan with ${plan.getSteps().length} steps based on current state`);
+        return plan;
+      } else {
+        this.reporter.log(`❌ Failed to replan with domain service: ${planResult.getError()}`);
       }
     } catch (error) {
       this.reporter.log(`❌ Failed to replan with state context: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1401,15 +983,9 @@ export class WorkflowManager {
    * Creates a plan using the domain planning service
    */
   private async createPlanWithDomainService(goal: string, currentUrl: string): Promise<Result<Plan>> {
-    if (!this.planningService) {
-      return Result.fail('Planning service not available');
-    }
-
     try {
-      // Capture current page state for context
       const currentState = await this.captureSemanticState();
       
-      // Create planning context
       const planningContext: PlanningContext = {
         goal,
         url: currentUrl,
@@ -1420,12 +996,10 @@ export class WorkflowManager {
         timeConstraints: this.config.timeout || 300000
       };
       
-      // Add workflowId if workflow exists (should always exist at this point)
       if (this.workflow) {
         planningContext.workflowId = this.workflow.getId();
       }
 
-      // Use domain service to create plan
       const planResult = await this.planningService.createPlan(goal, planningContext);
       if (planResult.isFailure()) {
         this.reporter.log(`❌ Domain planning failed: ${planResult.getError()}`);

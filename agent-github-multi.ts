@@ -48,18 +48,16 @@ async function main() {
   // Initialize multi-agent system
   const workflow = initMultiAgent({
     llm,
-    headless: false, // Visual feedback helpful for auth flows
+    headless: false,
     variables,
-    apiKey: process.env.OPENAI_API_KEY!,
     models: {
-      planner: 'gpt-5-nano',    // Strategic planning
-      executor: 'gpt-5-nano',   // DOM interaction with forms
-      evaluator: 'gpt-5-nano',  // Success validation
-      errorHandler: 'gpt-5-nano' // Auth error handling
+      planner: 'gpt-5-nano',
+      executor: 'gpt-5-nano',
+      evaluator: 'gpt-5-nano',
+      errorHandler: 'gpt-5-nano'
     },
     maxRetries: 3,
     timeout: 300000,
-    startUrl: 'https://github.com',
     verbose: true,
     reporterName: 'GitHubWorkflow'
   });
@@ -122,10 +120,8 @@ async function runSearchOnlyWorkflow() {
     llm,
     headless: false,
     variables: [],
-    apiKey: process.env.OPENAI_API_KEY!,
     models: { planner: 'gpt-5-nano', executor: 'gpt-5-nano', evaluator: 'gpt-5-nano' },
     maxRetries: 2,
-    startUrl: 'https://github.com',
     reporterName: 'GitHubSearch'
   });
   
