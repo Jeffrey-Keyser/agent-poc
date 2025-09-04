@@ -203,6 +203,12 @@ export class ExecutionContext {
     return Result.ok();
   }
 
+  // Force clear stuck executions
+  forceResetExecution(): void {
+    this.currentTaskId = undefined;
+    this.updatedAt = new Date();
+  }
+
   // Context analysis methods
   isTaskRunning(): boolean {
     return this.currentTaskId !== undefined;

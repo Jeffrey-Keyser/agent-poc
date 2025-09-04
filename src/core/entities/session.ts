@@ -62,7 +62,6 @@ export class Session {
     workflowId: WorkflowId,
     browserConfig: BrowserConfig
   ): Result<Session> {
-    // Validate browser config
     if (browserConfig.viewport.width <= 0 || browserConfig.viewport.height <= 0) {
       return Result.fail('Browser viewport dimensions must be positive');
     }

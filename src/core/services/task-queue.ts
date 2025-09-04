@@ -160,12 +160,9 @@ export class TaskQueue extends EventEmitter {
   
   // Performance optimization for high-priority tasks
   optimizeForHighPriority(): void {
-    // Fast-track high priority tasks when queue size > 10
     if (this.size() > 10) {
-      // Sort priority queue by priority value (highest first)
       this.priorityQueue.sort((a, b) => b.priority - a.priority);
       
-      // Emit optimization event for monitoring
       this.emit('queue:optimized', { 
         queueSize: this.size(),
         priorityTasks: this.priorityQueue.length

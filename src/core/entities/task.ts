@@ -249,22 +249,25 @@ export class Task {
   }
 
   retry(): Result<void> {
-    if (this.status !== TaskStatus.Retrying) {
-      return Result.fail('Task is not in retrying state');
+    if (this.status !== TaskStatus.Failed && this.status !== TaskStatus.Retrying) {
+      return Result.fail('Task must be in failed state to retry');
     }
 
-    if (!this.canRetry()) {
-      return Result.fail('Task cannot be retried - max retries reached');
+    if (this.retryCount >= this.maxRetries) {
+      return Result.fail('Maximum retry attempts exceeded');
     }
 
-    // Reset for retry
-    this.status = TaskStatus.Pending;
+    this.retryCount++;
+    this.status = TaskStatus.Pending; // Reset to pending for re-execution
     this.startTime = undefined;
     this.endTime = undefined;
     this.error = undefined;
     this.result = undefined;
     this.evidence = [];
     this.updatedAt = new Date();
+
+    // Note: Task events will be published by WorkflowManager which has the context
+    // this.addDomainEvent(new TaskRetriedEvent(...));
 
     return Result.ok();
   }

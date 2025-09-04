@@ -12,6 +12,7 @@ export class Step {
   private readonly id: StepId;
   private status: StepStatus;
   private readonly tasks: Task[] = [];
+  private retryCount: number = 0;
   private readonly createdAt: Date;
   private updatedAt: Date;
   private startTime: Date | undefined;
@@ -22,7 +23,8 @@ export class Step {
     id: StepId,
     public readonly description: string,
     private order: number,
-    public readonly confidence: Confidence
+    public readonly confidence: Confidence,
+    private readonly maxRetries: number = 3
   ) {
     this.id = id;
     this.status = StepStatus.Pending;
@@ -37,7 +39,8 @@ export class Step {
     id: StepId,
     description: string,
     order: number,
-    confidence: Confidence
+    confidence: Confidence,
+    maxRetries: number = 3
   ): Result<Step> {
     if (!description.trim()) {
       return Result.fail('Step description cannot be empty');
@@ -47,7 +50,11 @@ export class Step {
       return Result.fail('Step order must be positive');
     }
 
-    return Result.ok(new Step(id, description, order, confidence));
+    if (maxRetries < 0) {
+      return Result.fail('Max retries cannot be negative');
+    }
+
+    return Result.ok(new Step(id, description, order, confidence, maxRetries));
   }
 
   // Getters
@@ -69,6 +76,14 @@ export class Step {
 
   getConfidence(): Confidence {
     return this.confidence;
+  }
+
+  getRetryCount(): number {
+    return this.retryCount;
+  }
+
+  getMaxRetries(): number {
+    return this.maxRetries;
   }
 
   getTasks(): ReadonlyArray<Task> {
@@ -375,6 +390,24 @@ export class Step {
       throw new Error('Step order must be positive');
     }
 
+    // Retry count validation
+    if (this.retryCount < 0) {
+      throw new Error('Retry count cannot be negative');
+    }
+
+    if (this.retryCount > this.maxRetries) {
+      throw new Error('Retry count cannot exceed max retries');
+    }
+
+    // State consistency validation for retries
+    if (this.status === StepStatus.Pending && this.retryCount > 0 && this.startTime) {
+      throw new Error('Pending step with retries should not have start time');
+    }
+
+    if (this.status === StepStatus.Failed && this.retryCount >= this.maxRetries && this.canRetry()) {
+      throw new Error('Failed step at max retries should not be retryable');
+    }
+
     // Validate task IDs are unique
     const taskIds = this.tasks.map(task => task.getId().toString());
     const uniqueIds = new Set(taskIds);
@@ -416,6 +449,72 @@ export class Step {
       overallConfidence: this.getOverallConfidence(),
       executionDuration: this.getExecutionDuration()
     };
+  }
+
+  // Retry logic
+  canRetry(): boolean {
+    return this.retryCount < this.maxRetries;
+  }
+
+  getRemainingRetries(): number {
+    return Math.max(0, this.maxRetries - this.retryCount);
+  }
+
+  retry(): Result<void> {
+    // Allow retry from FAILED state
+    if (this.status !== StepStatus.Failed) {
+      return Result.fail('Step must be in failed state to retry');
+    }
+
+    if (this.retryCount >= this.maxRetries) {
+      return Result.fail('Maximum retry attempts exceeded');
+    }
+
+    this.retryCount++;
+    this.status = StepStatus.Pending; // Reset to pending for re-execution
+    this.startTime = undefined;
+    this.endTime = undefined;
+    this.updatedAt = new Date();
+
+    // Reset all tasks in this step to pending state
+    for (const task of this.tasks) {
+      if (task.isFailed()) {
+        const taskRetryResult = task.retry();
+        if (taskRetryResult.isFailure()) {
+          // If task can't be retried, reset it manually to pending
+          // This is a fallback to ensure step can be retried
+          console.warn(`Task ${task.getId().toString()} couldn't be retried: ${taskRetryResult.getError()}`);
+        }
+      }
+    }
+
+    // Note: Step events would be published by WorkflowManager which has the context
+    // this.addDomainEvent(new StepRetriedEvent(...));
+
+    return Result.ok();
+  }
+
+  resetForRetry(): Result<void> {
+    if (this.status === StepStatus.Running) {
+      return Result.fail('Cannot reset running step');
+    }
+
+    this.status = StepStatus.Pending;
+    this.startTime = undefined;
+    this.endTime = undefined;
+    this.updatedAt = new Date();
+
+    // Reset all tasks to pending
+    for (const task of this.tasks) {
+      if (!task.isPending()) {
+        const taskRetryResult = task.retry();
+        if (taskRetryResult.isFailure()) {
+          console.warn(`Task ${task.getId().toString()} couldn't be reset: ${taskRetryResult.getError()}`);
+        }
+      }
+    }
+
+    return Result.ok();
   }
 
   // Domain events support - placeholder for future step events

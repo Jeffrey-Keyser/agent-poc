@@ -11,7 +11,6 @@ import { Browser } from '../interfaces/browser.interface';
 import { DomService } from '@/infra/services/dom-service';
 import { AgentReporter } from '../interfaces/agent-reporter.interface';
 import { StateManager } from './state-manager';
-import { TaskQueue } from './task-queue';
 import { MemoryService, MemoryContext } from './memory-service';
 import { VariableManager } from './variable-manager';
 import { 
@@ -84,8 +83,6 @@ export class WorkflowManager {
   private workflowAggregate: WorkflowAggregate | null = null;
   private executionAggregate: ExecutionAggregate | null = null;
   
-  private taskQueue: TaskQueue;
-  
   private workflow: Workflow | null = null;
   private currentPlan: Plan | null = null;
   private currentGoal: string = '';
@@ -106,7 +103,6 @@ export class WorkflowManager {
   private workflowStuckHandler: WorkflowStuckHandler;
   private eventStore: IEventStore;
   private workflowSaga: WorkflowSaga;
-  
 
   constructor(
     private planningService: PlanningService,
@@ -132,14 +128,11 @@ export class WorkflowManager {
       ...config
     };
     
-    this.taskQueue =  new TaskQueue();
     this.stateManager = new StateManager(this.browser, this.domService);
     this.memoryService = new MemoryService(this.eventBus, this.memoryRepository);
     if (config.summarizer) {
       this.summarizer = config.summarizer;
     }
-    
-    this.setupTaskQueueEventListeners();
     this.setupStateManagerEventListeners();
     this.connectDomainEventsToMonitor();
     
@@ -198,20 +191,15 @@ export class WorkflowManager {
   }
 
   private createWorkflowAggregate(workflow: Workflow, plan: Plan): Result<WorkflowAggregate> {
-    // Create session entity
     const sessionResult = this.createSession(workflow.getId());
-    
     if (sessionResult.isFailure()) {
       return Result.fail(`Failed to create session: ${sessionResult.getError()}`);
     }
 
-    // Create workflow aggregate with TaskQueue integration
     const aggregateResult = WorkflowAggregate.create(
       workflow,
       plan,
-      sessionResult.getValue(),
-      this.taskQueue,  // Pass TaskQueue instance
-      this.reporter    // Pass reporter for logging
+      sessionResult.getValue()
     );
     
     if (aggregateResult.isFailure()) {
@@ -251,9 +239,6 @@ export class WorkflowManager {
     return Result.ok(executionAggregate);
   }
 
-
-
-
   async executeWorkflow(goal: string, startUrl?: string): Promise<WorkflowResult> {
     this.startTime = new Date();
     this.currentGoal = goal;
@@ -278,10 +263,8 @@ export class WorkflowManager {
       this.emitWorkflowEvent('workflow:started', { goal });
       
       const currentUrl = this.browser.getPageUrl();
-      
       let newPlan: Plan;
       
-      // Direct domain service usage - no conditionals
       const planResult = await this.createPlanWithDomainService(goal, currentUrl);
       if (planResult.isFailure()) {
         throw new Error(`Domain planning failed: ${planResult.getError()}`);
@@ -292,29 +275,26 @@ export class WorkflowManager {
       await this.planRepository.save(newPlan);
       this.reporter.log(`💾 Plan saved to repository: ${newPlan.getId().toString()}`);
       
-      // Now create the workflow aggregate with the valid plan
       const aggregateResult = this.createWorkflowAggregate(this.workflow, newPlan);
       if (aggregateResult.isFailure()) {
         throw new Error(`Failed to create workflow aggregate: ${aggregateResult.getError()}`);
       }
       
-      this.workflowAggregate = aggregateResult.getValue();
       this.currentPlan = newPlan;
       
       const executionAggregateResult = this.createExecutionAggregate();
       if (executionAggregateResult.isFailure()) {
         throw new Error(`Failed to create execution aggregate: ${executionAggregateResult.getError()}`);
       }
-      
+
       this.executionAggregate = executionAggregateResult.getValue();
       
-      // Start the workflow using aggregate
+      this.workflowAggregate = aggregateResult.getValue();
       const startResult = this.workflowAggregate.startExecution();
       if (startResult.isFailure()) {
         throw new Error(`Failed to start workflow execution: ${startResult.getError()}`);
       }
-      
-      // Create strategy from domain service plan
+
       this.currentStrategy = {
         id: `domain-strategy-${Date.now()}`,
         goal,
@@ -335,45 +315,63 @@ export class WorkflowManager {
       };
       this.reporter.log(`📋 Strategic plan created with ${this.currentPlan.getSteps().length} steps`);
       
-      this.taskQueue.clear();
-      this.reporter.log(`📊 TaskQueue cleared for new workflow execution`);
+      this.reporter.log(`📊 Using direct WorkflowAggregate execution (TaskQueue removed)`);
       
-      // Track which steps have been successfully completed
       const successfullyCompletedSteps: StrategicTask[] = [];
       
-      // Execute steps using workflow aggregate with queue-based scheduling
+      // Simplified execution loop using WorkflowAggregate methods
+      let loopCounter = 0;
+      const maxLoopIterations = 1000; // Safeguard against infinite loops
+      
       while (true) {
-        // Report queue status before step execution
-        const readyTasks = this.taskQueue.getReadyTasks();
-        const blockedTasks = this.taskQueue.getBlockedTasks();
-        this.reporter.log(`📊 Queue Status: ${readyTasks.length} ready, ${blockedTasks.length} blocked, ${this.taskQueue.size()} total`);
-        
-        // Optimize queue if necessary
-        this.taskQueue.optimizeForHighPriority();
-        
-        // Perform memory cleanup periodically
-        if (this.taskQueue.size() % 50 === 0) {
-          this.taskQueue.cleanupCompletedTasks();
+        // Infinite loop protection
+        loopCounter++;
+        if (loopCounter > maxLoopIterations) {
+          this.reporter.log(`🛑 Loop limit exceeded (${maxLoopIterations}), breaking to prevent infinite loop`);
+          break;
         }
-        
-        const stepExecutionResult = await this.workflowAggregate!.executeNextStep();
-        if (stepExecutionResult.isFailure()) {
-          this.reporter.log(`No more steps to execute: ${stepExecutionResult.getError()}`);
+        // Get next step from workflow aggregate (without execution)
+        const stepResult = await this.workflowAggregate!.getNextStep();
+        if (stepResult.isFailure()) {
+          this.reporter.log(`No more steps to execute: ${stepResult.getError()}`);
           break;
         }
         
-        const stepResult = stepExecutionResult.getValue();
-        const currentStep = stepResult.step;
-        
+        const currentStep = stepResult.getValue();
         this.reporter.log(`⚡ Executing step: ${currentStep.getDescription()}`);
         
-        // Execute each task in the step using ExecutionAggregate
+        // Mark step as started
+        const stepStartResult = currentStep.start();
+        if (stepStartResult.isFailure()) {
+          this.reporter.log(`Failed to start step: ${stepStartResult.getError()}`);
+          continue;
+        }
+        
         const tasks = currentStep.getTasks();
+        const stepTaskResults: any[] = [];
+        
         for (const task of tasks) {
-          // Start task execution using ExecutionAggregate
+          // Reset execution context if needed
+          if (this.executionAggregate) {
+            const context = this.executionAggregate.getContext();
+            if (context.getCurrentTaskId()) {
+              this.executionAggregate.getContext().forceResetExecution();
+            }
+          }
+          
+          // Start task execution
           const startExecutionResult = this.executionAggregate!.startTaskExecution(task);
           if (startExecutionResult.isFailure()) {
-            this.reporter.log(`Failed to start task execution: ${startExecutionResult.getError()}`);
+            this.reporter.log(`Failed to start task: ${startExecutionResult.getError()}`);
+            
+            // Create failure result
+            const failureResult = {
+              taskId: task.getId().toString(),
+              success: false,
+              error: startExecutionResult.getError(),
+              timestamp: new Date()
+            };
+            stepTaskResults.push(failureResult);
             continue;
           }
           
@@ -381,91 +379,63 @@ export class WorkflowManager {
           const taskStartTime = Date.now();
           
           try {
-            // Create execution context for the task
-            const currentState = await this.captureSemanticState();
-            const currentUrlObj = Url.create(this.browser.getPageUrl()).getValue();
-            const viewport = Viewport.create(1920, 1080).getValue();
-            
-            // Convert PageState to domain PageState
-            const domainPageState = PageStateVO.create({
-              url: currentUrlObj,
-              title: currentState.title || 'Current Page', 
-              html: '',
-              elements: [],
-              loadTime: 0
-            });
-            
-            const executionContext = {
-              currentUrl: currentUrlObj,
-              viewport: viewport,
-              pageState: domainPageState,
-              availableActions: currentState.availableActions,
-              previousActions: []
-            };
-            
-            // Use execution service directly
+            // Build execution context for real execution service
+            const executionContext = await this.buildExecutionContext(task);
             const executionResult = await this.executionService.executeTask(task, executionContext);
             
-            if (executionResult.isFailure()) {
-              throw new Error(executionResult.getError());
+            let taskResult: any;
+            if (executionResult.isSuccess()) {
+              const result = executionResult.getValue();
+              
+              // Evaluate the result
+              const evaluationResult = await this.evaluationService.evaluateTaskCompletion(
+                task,
+                result.evidence,
+                this.buildEvaluationContext()
+              );
+              
+              taskResult = {
+                taskId: task.getId().toString(),
+                success: evaluationResult.isSuccess(),
+                duration: Date.now() - taskStartTime,
+                data: result.evidence ? result.evidence.map(e => e.getData()) : [],
+                timestamp: new Date(),
+                ...(evaluationResult.isFailure() && { error: evaluationResult.getError() })
+              };
+            } else {
+              taskResult = {
+                taskId: task.getId().toString(),
+                success: false,
+                error: executionResult.getError(),
+                timestamp: new Date()
+              };
             }
             
-            const result = executionResult.getValue();
-            
-            // Use evaluation service to assess the execution
-            const evaluationContext = {
-              originalGoal: this.currentGoal,
-              currentUrl: currentUrlObj,
-              pageState: domainPageState,
-              workflowId: this.workflow?.getId(),
-              executionContext: this.executionAggregate?.getContext(),
-              timeConstraints: 30000
-            };
-            
-            const evaluationResult = await this.evaluationService.evaluateTaskCompletion(
-              task, 
-              result.evidence, 
-              evaluationContext
-            );
-            
-            const taskExecutionResult = {
-              success: evaluationResult.isSuccess(),
-              duration: Date.now() - taskStartTime,
-              evidence: {
-                extractedData: result.evidence ? result.evidence.map(e => e.getData()) : []
-              },
-              errorReason: evaluationResult.isFailure() ? evaluationResult.getError() : undefined
-            };
-          
-            const taskResult = {
-              taskId: task.getId().toString(),
-              success: taskExecutionResult.success,
-              duration: taskExecutionResult.duration,
-              timestamp: new Date(),
-              data: taskExecutionResult.evidence?.extractedData,
-              ...(taskExecutionResult.errorReason && { error: taskExecutionResult.errorReason })
-            };
-            
-            const evidence = taskExecutionResult.evidence ? 
+            // Record in execution aggregate
+            const evidence = taskResult.data ? 
               Evidence.create(
                 'screenshot',
-                JSON.stringify(taskExecutionResult.evidence),
+                JSON.stringify({ extractedData: taskResult.data }),
                 { source: 'domain-service-execution', description: 'Domain service task execution' }
               ).getValue() : undefined;
-          
-          const recordResult = await this.executionAggregate!.recordExecution(
-            task,
-            taskResult,
-            evidence,
-            `Step: ${currentStep.getDescription()}`
-          );
-          
-          if (recordResult.isFailure()) {
-            this.reporter.log(`Failed to record execution: ${recordResult.getError()}`);
-          }
-          
-            if (taskExecutionResult.success) {
-              // Create a strategic task for tracking (minimal conversion for legacy tracking)
+            
+            const recordResult = await this.executionAggregate!.recordExecution(
+              task,
+              taskResult,
+              evidence,
+              `Step: ${currentStep.getDescription()}`
+            );
+            
+            if (recordResult.isFailure()) {
+              this.reporter.log(`Failed to record execution: ${recordResult.getError()}`);
+            }
+            
+            // Update task state in workflow aggregate
+            if (taskResult.success) {
+              task.complete(taskResult);
+              this.workflowAggregate!.recordTaskCompletion(task.getId(), taskResult);
+              
+              // Create strategic task for legacy tracking
               const strategicTask = {
                 id: task.getId().toString(),
                 name: task.getDescription(),
@@ -478,11 +448,10 @@ export class WorkflowManager {
                 maxAttempts: task.getMaxRetries() + 1,
                 priority: 1
               };
-              
               successfullyCompletedSteps.push(strategicTask);
               this.reporter.log(`✅ Task completed: ${task.getDescription()}`);
-            
-              // Update execution context
+              
+              // Update execution context URL
               try {
                 const currentUrlString = this.browser.getPageUrl();
                 const urlResult = Url.create(currentUrlString);
@@ -492,33 +461,56 @@ export class WorkflowManager {
               } catch (error) {
                 this.reporter.log(`Warning: Failed to update execution context: ${error}`);
               }
-            
-            if (this.config.enableReplanning) {
-              const replanRequired = await this.checkForReplanning();
-              if (replanRequired) {
-                this.reporter.log(`🔄 Replanning executed after successful task due to significant state changes`);
-                break;
-              }
-            }
-            
-            if (this.config.allowEarlyExit) {
-              const completion = this.calculateCompletionPercentage();
-              const criticalStepsComplete = this.checkCriticalSteps();
-              
-              if (completion >= (this.config.minAcceptableCompletion || 60) && criticalStepsComplete) {
-                this.reporter.log(`✅ Achieved ${completion.toFixed(1)}% completion with critical steps done. Exiting with partial success.`);
-                await this.publishEntityEvents();
-                return await this.buildWorkflowResult();
-              }
-            }
             } else {
-              // Handle task failure with retry logic
-              this.reporter.log(`❌ Task failed: ${task.getDescription()}`);
-              throw new Error(taskExecutionResult.errorReason || 'Task execution failed');
+              task.fail(new Error(taskResult.error || 'Task execution failed'));
+              
+              // Handle retry
+              if (task.canRetry()) {
+                this.reporter.log(`🔄 Retrying task ${task.getRetryCount()}/${task.getMaxRetries()}`);
+                const retryResult = task.retry();
+                if (retryResult.isSuccess()) {
+                  // Note: Task will be retried in the next workflow step iteration
+                  // since tasks array is readonly, we can't modify it here
+                  this.reporter.log(`🔄 Task marked for retry: ${task.getDescription()}`);
+                }
+              }
+            }
+            
+            stepTaskResults.push(taskResult);
+            
+            // Check for early exit conditions
+            if (taskResult.success) {
+              if (this.config.enableReplanning) {
+                const replanRequired = await this.checkForReplanning();
+                if (replanRequired) {
+                  this.reporter.log(`🔄 Replanning executed after successful task due to significant state changes`);
+                  break;
+                }
+              }
+              
+              if (this.config.allowEarlyExit) {
+                const completion = this.calculateCompletionPercentage();
+                const criticalStepsComplete = this.checkCriticalSteps();
+                
+                if (completion >= (this.config.minAcceptableCompletion || 60) && criticalStepsComplete) {
+                  this.reporter.log(`✅ Achieved ${completion.toFixed(1)}% completion with critical steps done. Exiting with partial success.`);
+                  await this.publishEntityEvents();
+                  return await this.buildWorkflowResult();
+                }
+              }
             }
             
           } catch (error) {
-            // Handle task failure with retry logic
+            const errorResult = {
+              taskId: task.getId().toString(),
+              success: false,
+              error: error instanceof Error ? error.message : String(error),
+              timestamp: new Date()
+            };
+            stepTaskResults.push(errorResult);
+            task.fail(error instanceof Error ? error : new Error(String(error)));
+            
+            // Record failure for memory service
             const beforeState = await this.captureSemanticState();
             const context: MemoryContext = {
               url: this.browser.getPageUrl(),
@@ -526,7 +518,6 @@ export class WorkflowManager {
               pageSection: beforeState.visibleSections[0]
             };
             
-            // Record what failed for future reference
             this.memoryService.addLearning(
               context,
               `Task "${task.getDescription()}" failed: ${error}`,
@@ -536,47 +527,78 @@ export class WorkflowManager {
                 confidence: 0.8
               }
             );
-            
-            // Check if task can be retried
-            if (task.canRetry()) {
-              this.reporter.log(`🔄 Task failed but can retry: ${task.getRetryCount()}/${task.getMaxRetries()} attempts. Retrying...`);
-              
-              const retryResult = task.retry();
-              if (retryResult.isSuccess()) {
-                continue;
-              } else {
-                this.reporter.log(`❌ Failed to mark task for retry: ${retryResult.getError()}`);
-              }
-            } else {
-              this.reporter.log(`⚠️ Task failed and max retries (${task.getMaxRetries()}) reached. Moving to next step...`);
-            }
-            
-            if (this.config.enableReplanning) {
-              const replanRequired = await this.checkForReplanning();
-              if (replanRequired) {
-                this.reporter.log(`🔄 Replanning executed due to task failure and state changes`);
-                continue;
-              }
-            }
-            
-            // Mark current step as failed but don't terminate workflow
-            const stepFailResult = currentStep.fail(`Task failed: ${error instanceof Error ? error.message : String(error)}`);
-            if (stepFailResult.isFailure()) {
-              this.reporter.log(`Warning: Failed to mark step as failed: ${stepFailResult.getError()}`);
-            }
-            
-            // Continue to next step instead of terminating workflow
-            break;
           }
         }
         
-        this.reporter.log(`✅ Step completed: ${currentStep.getDescription()}`);
+        // Complete step with actual results
+        const stepSuccess = stepTaskResults.every(r => r.success);
+        const completeStepResult = this.workflowAggregate!.completeStep(
+          currentStep.getId(),
+          stepTaskResults
+        );
+        
+        if (completeStepResult.isFailure()) {
+          this.reporter.log(`Failed to complete step: ${completeStepResult.getError()}`);
+        }
+        
+        this.reporter.log(`✅ Step completed: ${currentStep.getDescription()} (Success: ${stepSuccess})`);
         
         // Check if workflow is complete
         const status = this.workflowAggregate!.getExecutionStatus();
         if (status.completionPercentage >= 100) {
           this.reporter.log('🎉 Workflow completed successfully');
           break;
+        }
+        
+        // Handle step completion results
+        if (stepSuccess) {
+          // Step succeeded - advance to next step
+          const advanceResult = this.workflowAggregate!.advanceToNextStep();
+          if (advanceResult.isFailure()) {
+            this.reporter.log(`Cannot advance: ${advanceResult.getError()}`);
+            break;
+          }
+        } else {
+          // Step failed - WorkflowAggregate.completeStep() already handled retry logic
+          this.reporter.log(`❌ Step failed: ${currentStep.getDescription()}`);
+          
+          // Check current step state after completeStep processing
+          const stepAfterProcessing = this.workflowAggregate!.getNextStep();
+          if (stepAfterProcessing.isSuccess()) {
+            const step = stepAfterProcessing.getValue();
+            
+            if (step.getId().equals(currentStep.getId())) {
+              // Same step - it was reset for retry
+              if (step.isPending()) {
+                this.reporter.log(`🔄 Step reset for retry: ${step.getDescription()} (${step.getRetryCount()}/${step.getMaxRetries()})`);
+                // Continue loop to retry the step
+                continue;
+              } else if (step.isFailed() && !step.canRetry()) {
+                this.reporter.log(`💀 Step permanently failed: ${step.getDescription()} (max retries exceeded)`);
+                // Try to advance to next step
+                const advanceResult = this.workflowAggregate!.advanceToNextStep();
+                if (advanceResult.isFailure()) {
+                  this.reporter.log(`Cannot advance from permanently failed step: ${advanceResult.getError()}`);
+                  break;
+                }
+              }
+            } else {
+              // Different step - WorkflowAggregate advanced to next step automatically
+              this.reporter.log(`➡️ Advanced to next step after failure: ${step.getDescription()}`);
+            }
+          } else {
+            // No more steps available
+            this.reporter.log(`No more steps available: ${stepAfterProcessing.getError()}`);
+            break;
+          }
+          
+          // Optional: Handle replanning for complex failure scenarios
+          if (this.config.enableReplanning) {
+            const replanRequired = await this.checkForReplanning();
+            if (replanRequired) {
+              this.reporter.log(`🔄 Replanning triggered due to step failure`);
+            }
+          }
         }
       }
       
@@ -624,7 +646,7 @@ export class WorkflowManager {
         }
       }
       
-      this.reporter.log(`📊 Final Queue Metrics: ${this.taskQueue.getAllTasks().length} total tasks processed`);
+      this.reporter.log(`📊 Workflow execution completed using direct aggregate approach`);
       
       await this.publishEntityEvents();
       return await this.buildWorkflowResult();
@@ -640,7 +662,6 @@ export class WorkflowManager {
 
 
   private async captureSemanticState(): Promise<PageState> {
-    // Use StateManager which now captures screenshots
     return await this.stateManager.captureState();
   }
 
@@ -979,6 +1000,41 @@ export class WorkflowManager {
     }
   }
 
+  private async buildExecutionContext(_task: any): Promise<any> {
+    const currentState = await this.captureSemanticState();
+    const currentUrlObj = Url.create(this.browser.getPageUrl()).getValue();
+    const viewport = Viewport.create(1920, 1080).getValue();
+    
+    const domainPageState = PageStateVO.create({
+      url: currentUrlObj,
+      title: currentState.title || 'Current Page', 
+      html: '',
+      elements: [],
+      loadTime: 0
+    });
+    
+    return {
+      currentUrl: currentUrlObj,
+      viewport: viewport,
+      pageState: domainPageState,
+      availableActions: currentState.availableActions,
+      previousActions: []
+    };
+  }
+
+  private buildEvaluationContext(): any {
+    const currentUrlObj = Url.create(this.browser.getPageUrl()).getValue();
+    
+    return {
+      originalGoal: this.currentGoal,
+      currentUrl: currentUrlObj,
+      pageState: null, // Will be set by caller if needed
+      workflowId: this.workflow?.getId(),
+      executionContext: this.executionAggregate?.getContext(),
+      timeConstraints: 30000
+    };
+  }
+
   /**
    * Creates a plan using the domain planning service
    */
@@ -1110,44 +1166,8 @@ export class WorkflowManager {
   }
 
   /**
-   * Setup TaskQueue event listeners for monitoring integration
+   * TaskQueue event listeners removed - using direct WorkflowAggregate execution
    */
-  private setupTaskQueueEventListeners(): void {
-    this.taskQueue.on('task:enqueued', (data: any) => {
-      this.reporter.log(`📥 Task enqueued: ${data.task.name} (Queue: ${data.queueSize}, Ready: ${data.readyCount}, Blocked: ${data.blockedCount})`);
-      this.eventBus.emit('queue:task-added', data);
-    });
-
-    this.taskQueue.on('task:dequeued', (data: any) => {
-      this.reporter.log(`📤 Task dequeued: ${data.task.name} (Remaining: ${data.remainingSize})`);
-      this.eventBus.emit('queue:task-removed', data);
-    });
-
-    this.taskQueue.on('task:completed', (data: any) => {
-      this.reporter.log(`✅ Task completed in queue: ${data.taskId} (Total completed: ${data.completedCount})`);
-      this.eventBus.emit('queue:task-completed', data);
-    });
-
-    this.taskQueue.on('task:failed', (data: any) => {
-      this.reporter.log(`❌ Task failed in queue: ${data.taskId} - ${data.error}`);
-      this.eventBus.emit('queue:task-failed', data);
-    });
-
-    this.taskQueue.on('task:blocked', (data: any) => {
-      this.reporter.log(`🚫 Task blocked: ${data.task.name} (Dependencies: ${data.unmetDependencies.join(', ')})`);
-      this.eventBus.emit('queue:task-blocked', data);
-    });
-
-    this.taskQueue.on('queue:optimized', (data: any) => {
-      this.reporter.log(`🔧 Queue optimized: ${data.queueSize} total, ${data.priorityTasks} priority tasks`);
-      this.eventBus.emit('queue:optimized', data);
-    });
-
-    this.taskQueue.on('queue:cleanup', (data: any) => {
-      this.reporter.log(`🧹 Queue cleanup: removed ${data.removedCount} old completed tasks, ${data.remainingCount} remaining`);
-      this.eventBus.emit('queue:cleanup', data);
-    });
-  }
   
   /**
    * Setup StateManager event listeners for monitoring integration
