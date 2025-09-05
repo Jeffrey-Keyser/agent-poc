@@ -61,7 +61,6 @@ export class TaskExecutorAgent implements ITaskExecutor {
         pixelBelow
       } = await this.domService.getInteractiveElements();
 
-      // MODIFIED: Pass visual context and variable manager to decomposition
       const microActions = await this.decomposeStrategicStep(
         strategicTask, 
         stringifiedDomState,

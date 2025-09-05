@@ -209,7 +209,6 @@ export class Step {
     };
   }
 
-  // Domain methods
   start(): Result<void> {
     if (this.status !== StepStatus.Pending) {
       return Result.fail('Step is not in pending state');

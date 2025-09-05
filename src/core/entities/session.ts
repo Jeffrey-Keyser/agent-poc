@@ -73,6 +73,17 @@ export class Session {
     return Result.ok(new Session(id, workflowId, browserConfig));
   }
 
+  static createDefault(workflowId: WorkflowId): Result<Session> {
+    const sessionId = SessionId.generate();
+    const defaultBrowserConfig: BrowserConfig = {
+      headless: true,
+      viewport: { width: 1920, height: 1080 },
+      timeout: 30000
+    };
+
+    return Session.create(sessionId, workflowId, defaultBrowserConfig);
+  }
+
   // Getters
   getId(): SessionId {
     return this.id;

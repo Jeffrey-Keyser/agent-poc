@@ -34,12 +34,6 @@ export {
   PageState,
   StepResult
 } from './core/types/agent-types';
-export {
-  DeploymentEnvironment,
-  DeploymentConfig,
-  getDeploymentConfig,
-  getRecommendedConfig
-} from './core/config/deployment-config';
 
 /**
  * Export Chat Models

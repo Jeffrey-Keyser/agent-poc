@@ -81,6 +81,32 @@ export class Workflow {
     this.executionHistory = new ExecutionHistory();
   }
 
+  // Static factory method
+  static create(
+    goal: string,
+    startUrl: string,
+    variables: Variable[] = []
+  ): Result<Workflow> {
+    if (!goal || goal.trim().length === 0) {
+      return Result.fail('Workflow goal cannot be empty');
+    }
+
+    const urlResult = Url.create(startUrl);
+    if (!urlResult.isSuccess()) {
+      return Result.fail(`Invalid start URL: ${urlResult.getError()}`);
+    }
+
+    const workflowId = WorkflowId.generate();
+    const workflow = new Workflow(
+      workflowId,
+      goal,
+      urlResult.getValue(),
+      variables
+    );
+
+    return Result.ok(workflow);
+  }
+
   // Getters
   getId(): WorkflowId {
     return this.id;

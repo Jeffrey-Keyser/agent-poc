@@ -66,7 +66,7 @@ async function main() {
     console.log('🚀 Starting GitHub multi-agent workflow...');
     
     // Example 1: Login and profile update
-    const loginResult = await workflow.executeWorkflow(
+    const loginResult = await workflow.execute(
       'Login to GitHub with username {{username}} and password {{password}}, then navigate to profile settings and update bio to "Building the future with AI"'
     );
     
@@ -126,7 +126,7 @@ async function runSearchOnlyWorkflow() {
   });
   
   try {
-    const result = await workflow.executeWorkflow(
+    const result = await workflow.execute(
       'Search for "playwright automation" repositories and extract the top 5 results with their stars, descriptions, and main language'
     );
     

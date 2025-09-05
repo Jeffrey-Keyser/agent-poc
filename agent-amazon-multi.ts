@@ -48,7 +48,7 @@ async function main() {
   try {
     console.log('🚀 Starting Amazon multi-agent workflow...');
     
-    const searchResult = await workflow.executeWorkflow(
+    const searchResult = await workflow.execute(
       'Search Amazon for dark roast caffeinated coffee beans and return the URL of the first coffee package that has a rating of 4.5 or higher, is ~$25.00, in stock and is a dark roast. Don\'t utilize filters on the list page.',
       'https://amazon.com'    
     );
