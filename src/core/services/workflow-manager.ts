@@ -44,7 +44,9 @@ import {
   Plan,
   Result,
   Session,
-  ExecutionContext
+  ExecutionContext,
+  Step,
+  Task
 } from '../entities';
 import {
   Variable,
@@ -179,7 +181,7 @@ export class WorkflowManager {
       await this.setupAggregates();
 
       this.currentStrategy = this.createStrategyFromPlan(this.currentGoal, this.currentPlan!);
-      const successfullyCompletedSteps = await this.executeWorkflowSteps();
+      const successfullyCompletedSteps = await this.executeSteps();
       
       await this.finalizeWorkflow(successfullyCompletedSteps);
       
@@ -275,7 +277,6 @@ export class WorkflowManager {
     }
     this.executionAggregate = executionAggregateResult.getValue();
     
-    // Set state manager on execution aggregate
     this.executionAggregate.setStateManager(this.stateManager);
     
     // Start workflow execution
@@ -283,7 +284,6 @@ export class WorkflowManager {
     if (startResult.isFailure()) {
       throw new Error(`Failed to start workflow execution: ${startResult.getError()}`);
     }
-
   }
 
   /**
@@ -310,37 +310,16 @@ export class WorkflowManager {
   /**
    * Execute all workflow steps
    */
-  private async executeWorkflowSteps(): Promise<StrategicTask[]> {
-    this.reporter.log(`📊 Using direct WorkflowAggregate execution (TaskQueue removed)`);
-    
+  private async executeSteps(): Promise<StrategicTask[]> {
     const successfullyCompletedSteps: StrategicTask[] = [];
-    let loopCounter = 0;
-    const maxLoopIterations = 1000; // Safeguard against infinite loops
-    
-    while (true) {
-      // Infinite loop protection
-      loopCounter++;
-      if (loopCounter > maxLoopIterations) {
-        this.reporter.log(`🛑 Loop limit exceeded (${maxLoopIterations}), breaking to prevent infinite loop`);
-        break;
-      }
+    for (const step of this.currentPlan!.getSteps()) {
+      // TODO: Update this to utilize the aggregate
       
-      // Get next step from workflow aggregate
-      const stepResult = await this.workflowAggregate!.getNextStep();
-      if (stepResult.isFailure()) {
-        this.reporter.log(`No more steps to execute: ${stepResult.getError()}`);
-        break;
-      }
-      
-      const currentStep = stepResult.getValue();
-      
-      // Execute the step and its tasks
-      const stepExecutionResult = await this.executeStep(currentStep);
+      const stepExecutionResult = await this.executeStep(step);
       successfullyCompletedSteps.push(...stepExecutionResult.successfulTasks);
       
-      // Process step completion
       const continueExecution = await this.processStepCompletion(
-        currentStep,
+        step,
         stepExecutionResult.taskResults,
         stepExecutionResult.stepSuccess
       );
@@ -356,27 +335,27 @@ export class WorkflowManager {
   /**
    * Execute a single step and all its tasks
    */
-  private async executeStep(currentStep: any): Promise<{
+  private async executeStep(step: Step): Promise<{
     stepSuccess: boolean;
     taskResults: any[];
     successfulTasks: StrategicTask[];
   }> {
-    this.reporter.log(`⚡ Executing step: ${currentStep.getDescription()}`);
+    this.reporter.log(`⚡ Executing step: ${step.getDescription()}`);
     
     // Mark step as started
-    const stepStartResult = currentStep.start();
+    const stepStartResult = step.start();
     if (stepStartResult.isFailure()) {
       this.reporter.log(`Failed to start step: ${stepStartResult.getError()}`);
       return { stepSuccess: false, taskResults: [], successfulTasks: [] };
     }
     
-    const tasks = currentStep.getTasks();
+    const tasks = step.getTasks();
     const stepTaskResults: any[] = [];
     const successfulTasks: StrategicTask[] = [];
     
     // Execute each task in the step
     for (const task of tasks) {
-      const taskExecutionResult = await this.executeTask(task, currentStep);
+      const taskExecutionResult = await this.executeTask(task, step);
       stepTaskResults.push(taskExecutionResult.result);
       
       if (taskExecutionResult.strategicTask) {
@@ -392,9 +371,8 @@ export class WorkflowManager {
     // Determine step success
     const stepSuccess = stepTaskResults.every(r => r.success);
     
-    // Store step result in completedSteps Map for backward compatibility
     const stepResult: StepResult = {
-      stepId: currentStep.getId().toString(),
+      stepId: step.getId().toString(),
       success: stepSuccess,
       status: stepSuccess ? 'success' : 'failure',
       microActions: [],
@@ -404,7 +382,7 @@ export class WorkflowManager {
       duration: stepTaskResults.reduce((sum, r) => sum + (r.duration || 0), 0),
       attempts: 1
     };
-    this.completedSteps.set(currentStep.getId().toString(), stepResult);
+    this.completedSteps.set(step.getId().toString(), stepResult);
     
     return { stepSuccess, taskResults: stepTaskResults, successfulTasks };
   }
@@ -412,20 +390,11 @@ export class WorkflowManager {
   /**
    * Execute a single task with error handling and retry logic
    */
-  private async executeTask(task: any, currentStep: any): Promise<{
+  private async executeTask(task: Task, step: Step): Promise<{
     result: any;
     strategicTask?: StrategicTask | undefined;
     shouldBreak: boolean;
   }> {
-    // Reset execution context if needed
-    if (this.executionAggregate) {
-      const context = this.executionAggregate.getContext();
-      if (context.getCurrentTaskId()) {
-        this.executionAggregate.getContext().forceResetExecution();
-      }
-    }
-    
-    // Start task execution
     const startExecutionResult = this.executionAggregate!.startTaskExecution(task);
     if (startExecutionResult.isFailure()) {
       this.reporter.log(`Failed to start task: ${startExecutionResult.getError()}`);
@@ -477,7 +446,7 @@ export class WorkflowManager {
       }
       
       // Record execution and handle result
-      await this.recordTaskExecution(task, taskResult, currentStep);
+      await this.recordTaskExecution(task, taskResult, step);
       
       let strategicTask: StrategicTask | undefined;
       if (taskResult.success) {

@@ -9,7 +9,6 @@ import { TaskSummarizerAgent } from '../agents/task-summarizer';
 import { 
   BrowserExecutionService, 
   AIEvaluationService,
-  ExecutionService, 
   EvaluationService
 } from '../../infrastructure/services';
 import {
@@ -22,6 +21,7 @@ import {
   InMemoryPlanRepository,
   InMemoryMemoryRepository
 } from '../../infrastructure/repositories';
+import { ExecutionService } from '../domain-services/execution-service';
 
 /**
  * Simplified configuration interface for WorkflowFactory

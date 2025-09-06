@@ -16,7 +16,6 @@ import { VariableString } from '../../value-objects/variable-string';
  * 2. Finds appropriate elements from current page state
  * 3. Decomposes into precise micro-actions
  * 4. Executes each micro-action sequentially
- * 5. Returns results with evidence of what happened
  * 
  * Key principles:
  * - Uses runtime DOM discovery (no hardcoded selectors)
@@ -50,7 +49,6 @@ export class TaskExecutorAgent implements ITaskExecutor {
     }
 
     const strategicTask = input.task;
-
     try {
       // MODIFIED: Get full DOM state with screenshots
       const {
@@ -61,12 +59,12 @@ export class TaskExecutorAgent implements ITaskExecutor {
         pixelBelow
       } = await this.domService.getInteractiveElements();
 
+      // TODO: This should probably be split out
       const microActions = await this.decomposeStrategicStep(
         strategicTask, 
         stringifiedDomState,
         { screenshot, pristineScreenshot, pixelAbove, pixelBelow },
-        input.memoryLearnings, // NEW: Pass memory learnings
-        input.variableManager // NEW: Pass variable manager
+        input.memoryLearnings,
       );
       
       console.log(`🔍 Decomposed micro-actions: ${JSON.stringify(microActions)}`);
@@ -166,25 +164,17 @@ export class TaskExecutorAgent implements ITaskExecutor {
       pixelBelow?: number;
     },
     memoryLearnings?: string, // NEW parameter
-    variableManager?: any // NEW parameter for variable interpolation
   ): Promise<MicroAction[]> {
     const systemMessage = new SystemMessage({ content: TASK_EXECUTOR_PROMPT });
     
-    // Interpolate variables in strategic task data if variable manager is available
-    const interpolatedDescription = variableManager ? 
-      variableManager.interpolate(strategicTask.description) : strategicTask.description;
-    const interpolatedExpectedOutcome = variableManager ? 
-      variableManager.interpolate(strategicTask.expectedOutcome) : strategicTask.expectedOutcome;
-
     const userPrompt = `
 ${memoryLearnings ? `${memoryLearnings}\n` : ''}
 
 STRATEGIC TASK TO EXECUTE:
 
 Intent: ${strategicTask.intent}
-Description: ${interpolatedDescription}
 Target Concept: ${strategicTask.targetConcept}
-Expected Outcome: ${interpolatedExpectedOutcome}
+Expected Outcome: ${strategicTask.expectedOutcome}
 
 ${visualContext?.pixelAbove ? `... ${visualContext.pixelAbove} PIXELS ABOVE - SCROLL UP TO SEE MORE` : ''}
 

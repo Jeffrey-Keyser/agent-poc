@@ -4,13 +4,10 @@ import {
   ExecutionAction,
   EnhancedTaskResult,
   StepExecutionConfig,
-  ExecutionValidation,
-  RecoveryAction,
   ExecutionError,
-  ValidationIssue
 } from '../../core/domain-services/execution-service';
-import { Task, Step, Result, TaskResult, ExecutionContext } from '../../core/entities';
-import { TaskId, ActionType, Evidence, PageState, Duration, Timeout } from '../../core/value-objects';
+import { Task, Result, TaskResult } from '../../core/entities';
+import { TaskId, ActionType, Evidence, Duration } from '../../core/value-objects';
 import { Browser } from '../../core/interfaces/browser.interface';
 import { LLM } from '../../core/interfaces/llm.interface';
 import { TaskExecutorAgent } from '../../core/agents/task-executor/task-executor';
@@ -23,7 +20,6 @@ import { DomService } from '../../infra/services/dom-service';
  */
 export class BrowserExecutionService implements ExecutionService {
   private taskExecutorAgent: TaskExecutorAgent;
-  private browser: Browser;
 
   constructor(
     llm: LLM,
@@ -32,7 +28,6 @@ export class BrowserExecutionService implements ExecutionService {
     config: ExecutorConfig
   ) {
     this.taskExecutorAgent = new TaskExecutorAgent(llm, browser, domService, config);
-    this.browser = browser;
   }
 
   async executeTask(
@@ -47,18 +42,6 @@ export class BrowserExecutionService implements ExecutionService {
     const maxRetries = config.retryPolicy?.maxRetries ?? 3;
 
     try {
-      // Pre-execution validation
-      const validationResult = await this.validateExecutionConditions(task, context);
-      if (validationResult.isFailure()) {
-        return Result.fail(`Execution validation failed: ${validationResult.getError()}`);
-      }
-
-      const validation = validationResult.getValue();
-      if (!validation.canExecute) {
-        const blockingIssues = validation.issues.filter(i => i.severity === 'blocking');
-        return Result.fail(`Cannot execute task: ${blockingIssues.map(i => i.message).join(', ')}`);
-      }
-
       // Execute task with retries
       let taskResult: TaskResult | undefined;
       let lastError: ExecutionError | undefined;
@@ -161,283 +144,6 @@ export class BrowserExecutionService implements ExecutionService {
 
     } catch (error) {
       return Result.fail(`Task execution error: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  async executeStep(
-    step: Step,
-    context: ExecutionContext,
-    config: StepExecutionConfig = this.getDefaultStepConfig()
-  ): Promise<Result<{ stepId: string; success: boolean; taskResults: TaskResult[]; confidence: number; }>> {
-    const startTime = new Date();
-    const taskResults: TaskResult[] = [];
-    let allTasksSucceeded = true;
-
-    try {
-      // Start the step
-      const stepStartResult = step.start();
-      if (stepStartResult.isFailure()) {
-        return Result.fail(`Failed to start step: ${stepStartResult.getError()}`);
-      }
-
-      // Execute all tasks in the step
-      const tasks = step.getTasks();
-      
-      for (const task of tasks) {
-        // Create task execution context from step context
-        const taskContext: TaskExecutionContext = {
-          currentUrl: context.getCurrentUrl(),
-          viewport: context.getViewport(),
-          pageState: context.getPageState() || PageState.create({
-            url: context.getCurrentUrl(),
-            title: 'Unknown',
-            html: '',
-            elements: [],
-            loadTime: 0
-          }),
-          availableActions: this.getAvailableActions(context),
-          previousActions: this.getPreviousActions(context),
-          timeRemaining: this.calculateRemainingTime(config.timeout, startTime)
-        };
-
-        // Execute the task
-        const taskResult = await this.executeTask(task, taskContext, config);
-        
-        if (taskResult.isSuccess()) {
-          const enhancedResult = taskResult.getValue();
-          const baseResult: TaskResult = {
-            taskId: enhancedResult.taskId,
-            success: enhancedResult.success,
-            timestamp: enhancedResult.timestamp,
-            data: enhancedResult.data
-          };
-
-          // Add optional properties only if they exist
-          if (enhancedResult.error) {
-            (baseResult as any).error = enhancedResult.error;
-          }
-          if (enhancedResult.duration) {
-            (baseResult as any).duration = enhancedResult.duration;
-          }
-
-          taskResults.push(baseResult);
-
-          if (!enhancedResult.success) {
-            allTasksSucceeded = false;
-          }
-
-          // Update execution context based on task result
-          await this.updateContextFromTaskResult(context, enhancedResult);
-        } else {
-          allTasksSucceeded = false;
-          // Create failed task result
-          taskResults.push({
-            taskId: task.getId().toString(),
-            success: false,
-            duration: 0,
-            timestamp: new Date(),
-            error: taskResult.getError()
-          });
-        }
-      }
-
-      // Complete the step
-      const stepCompletionResult = step.complete();
-      if (stepCompletionResult.isFailure()) {
-        return Result.fail(`Failed to complete step: ${stepCompletionResult.getError()}`);
-      }
-
-      // Create step result
-      const stepResult = {
-        stepId: step.getId().toString(),
-        success: allTasksSucceeded,
-        taskResults,
-        confidence: this.calculateStepConfidence(taskResults)
-      };
-
-      return Result.ok(stepResult);
-
-    } catch (error) {
-      return Result.fail(`Step execution error: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  async validateExecutionConditions(
-    task: Task,
-    context: TaskExecutionContext
-  ): Promise<Result<ExecutionValidation>> {
-    try {
-      const issues: ValidationIssue[] = [];
-      const recommendations: string[] = [];
-
-      // Check if browser is available and responsive
-      if (!this.browser) {
-        issues.push({
-          severity: 'blocking',
-          message: 'Browser instance not available',
-          affectedActions: [ActionType.leftClick(), ActionType.typeText(), ActionType.navigateUrl()]
-        });
-      }
-
-      // Check if page is loaded
-      try {
-        const pageUrl = this.browser.getPageUrl();
-        if (!pageUrl) {
-          issues.push({
-            severity: 'blocking',
-            message: 'No page loaded in browser',
-            affectedActions: [ActionType.leftClick(), ActionType.typeText(), ActionType.extractText()]
-          });
-        }
-      } catch {
-        issues.push({
-          severity: 'warning',
-          message: 'Could not verify page state',
-          affectedActions: []
-        });
-      }
-
-      // Check task-specific conditions
-      const intent = task.getIntent();
-      if (intent && this.requiresElementInteraction(intent)) {
-        if (!context.pageState || context.pageState.elements?.length === 0) {
-          issues.push({
-            severity: 'warning',
-            message: 'No interactive elements detected on page',
-            affectedActions: []
-          });
-          recommendations.push('Consider refreshing page or waiting for elements to load');
-        }
-      }
-
-      // Check timeout constraints
-      if (context.timeRemaining && context.timeRemaining.getMilliseconds() < 5000) {
-        issues.push({
-          severity: 'warning',
-          message: 'Low time remaining for task execution',
-          affectedActions: []
-        });
-        recommendations.push('Consider extending timeout or prioritizing critical actions');
-      }
-
-      const canExecute = !issues.some(issue => issue.severity === 'blocking');
-
-      const validation: ExecutionValidation = {
-        canExecute,
-        issues,
-        recommendations
-      };
-
-      return Result.ok(validation);
-
-    } catch (error) {
-      return Result.fail(`Validation error: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  async recoverFromError(
-    error: ExecutionError,
-    _context: TaskExecutionContext
-  ): Promise<Result<RecoveryAction>> {
-    try {
-      let recoveryAction: RecoveryAction;
-
-      switch (error.type) {
-        case 'timeout':
-          recoveryAction = {
-            type: 'retry',
-            description: 'Retry with extended timeout',
-            estimatedDuration: Duration.fromMilliseconds(10000).getValue(),
-            confidence: 70
-          };
-          break;
-
-        case 'element-not-found':
-          recoveryAction = {
-            type: 'alternative-action',
-            description: 'Try alternative element selection method',
-            estimatedDuration: Duration.fromMilliseconds(5000).getValue(),
-            confidence: 60
-          };
-          break;
-
-        case 'navigation-error':
-          recoveryAction = {
-            type: 'retry',
-            description: 'Refresh page and retry navigation',
-            estimatedDuration: Duration.fromMilliseconds(8000).getValue(),
-            confidence: 80
-          };
-          break;
-
-        case 'validation-error':
-          recoveryAction = {
-            type: 'user-intervention',
-            description: 'Manual validation required',
-            confidence: 30
-          };
-          break;
-
-        default:
-          recoveryAction = {
-            type: 'skip',
-            description: 'Skip task due to unknown error',
-            confidence: 20
-          };
-      }
-
-      return Result.ok(recoveryAction);
-
-    } catch (err) {
-      return Result.fail(`Recovery error: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  async estimateExecutionTime(
-    task: Task,
-    context: TaskExecutionContext
-  ): Promise<Result<Duration>> {
-    try {
-      let baseDuration = 3000; // 3 seconds base
-
-      const intent = task.getIntent();
-      if (intent) {
-        // Adjust based on action type
-        switch (intent.toString()) {
-          case 'navigate':
-            baseDuration = 5000;
-            break;
-          case 'click':
-            baseDuration = 2000;
-            break;
-          case 'type':
-            baseDuration = 4000;
-            break;
-          case 'extract':
-            baseDuration = 3000;
-            break;
-          case 'wait':
-            baseDuration = 8000;
-            break;
-          default:
-            baseDuration = 3000;
-        }
-      }
-
-      // Adjust for page complexity
-      const elementCount = context.pageState?.elements.length || 10;
-      if (elementCount > 50) {
-        baseDuration *= 1.5; // More complex page = longer execution
-      }
-
-      // Adjust for network conditions (simplified)
-      const networkDelay = 1000; // Assume 1 second network delay
-      const totalDuration = baseDuration + networkDelay;
-
-      return Result.ok(Duration.fromMilliseconds(totalDuration).getValue());
-
-    } catch (error) {
-      return Result.fail(`Time estimation error: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -602,53 +308,6 @@ export class BrowserExecutionService implements ExecutionService {
     return Math.round(confidence);
   }
 
-  private getDefaultStepConfig(): StepExecutionConfig {
-    return {
-      timeout: Timeout.create(
-        Duration.fromMilliseconds(30000).getValue(),
-        'action',
-        'Step execution timeout'
-      ).getValue(),
-      retryPolicy: {
-        maxRetries: 3,
-        retryDelay: Duration.fromMilliseconds(2000).getValue(),
-        retryOnErrors: ['timeout', 'element-not-found', 'navigation-error']
-      },
-      validationEnabled: true,
-      evidenceCollection: true
-    };
-  }
-
-  private getAvailableActions(_context: ExecutionContext): string[] {
-    return ['click', 'type', 'navigate', 'extract', 'wait'];
-  }
-
-  private getPreviousActions(_context: ExecutionContext): ExecutionAction[] {
-    return [];
-  }
-
-  private calculateRemainingTime(timeout: Timeout, startTime: Date): Duration {
-    const elapsed = Date.now() - startTime.getTime();
-    const remaining = Math.max(0, timeout.getMilliseconds() - elapsed);
-    return Duration.fromMilliseconds(remaining).getValue();
-  }
-
-  private async updateContextFromTaskResult(
-    _context: ExecutionContext,
-    _result: EnhancedTaskResult
-  ): Promise<void> {
-    // This would update the execution context based on task results
-  }
-
-  private calculateStepConfidence(taskResults: TaskResult[]): number {
-    const successCount = taskResults.filter(r => r.success).length;
-    return taskResults.length > 0 ? (successCount / taskResults.length) * 100 : 0;
-  }
-
-  private requiresElementInteraction(intent: any): boolean {
-    const interactiveIntents = ['click', 'type', 'select', 'hover'];
-    return interactiveIntents.includes(intent.toString());
-  }
 
   private getSuggestedAction(errorType: ExecutionError['type']): string {
     switch (errorType) {

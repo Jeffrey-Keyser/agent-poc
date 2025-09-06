@@ -14,17 +14,6 @@ export {
 } from '../../core/domain-services/planning-service';
 
 export {
-  ExecutionService,
-  TaskExecutionContext,
-  ExecutionAction,
-  EnhancedTaskResult,
-  StepExecutionConfig,
-  ExecutionValidation,
-  RecoveryAction,
-  ExecutionError
-} from '../../core/domain-services/execution-service';
-
-export {
   EvaluationService,
   EvaluationResult,
   StepEvaluation,

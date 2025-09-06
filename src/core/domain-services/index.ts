@@ -16,15 +16,11 @@ export {
 // Execution Domain Service - Handles task and step execution in web automation
 export {
   ExecutionService,
-  BrowserExecutionService,
   TaskExecutionContext,
   ExecutionAction,
   EnhancedTaskResult,
   ExecutionError,
   StepExecutionConfig,
-  ExecutionValidation,
-  RecoveryAction,
-  DOMService
 } from './execution-service';
 
 // Evaluation Domain Service - Evaluates task completion and workflow success  

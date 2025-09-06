@@ -41,7 +41,6 @@ export interface ExecutorInput {
     highlighted: string;
   };
   memoryLearnings?: string;
-  variableManager?: any; // VariableManager instance for variable interpolation
 }
 
 export interface ExecutorOutput {
