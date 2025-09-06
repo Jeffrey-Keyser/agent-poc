@@ -28,6 +28,3 @@ export {
 export { ExecutionContext } from './execution-context';
 
 export { ExecutionResult } from './execution-result';
-
-// Legacy export (maintained for backward compatibility)
-export { OpenatorResult } from './openator-result';

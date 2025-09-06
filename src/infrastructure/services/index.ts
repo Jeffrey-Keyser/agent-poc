@@ -1,7 +1,5 @@
 // Infrastructure services that implement domain service interfaces
 // These services bridge between domain logic and external systems/agents
-
-export { AITaskPlanningService } from './ai-task-planning-service';
 export { BrowserExecutionService } from './browser-execution-service';
 export { AIEvaluationService } from './ai-evaluation-service';
 

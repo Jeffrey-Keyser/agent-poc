@@ -10,11 +10,6 @@ export {
  * Export interfaces and types
  */
 export { LLM } from './core/interfaces/llm.interface';
-export {
-  OpenatorResult,
-  OpenatorResultStatus,
-  OpenatorResultStatuses,
-} from './core/entities/openator-result';
 
 /**
  * Export entities and classes

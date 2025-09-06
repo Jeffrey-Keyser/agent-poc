@@ -155,18 +155,10 @@ export class BrowserExecutionService implements ExecutionService {
     try {
       // Check queue dependencies if available
       if (activeQueue) {
-        const strategicTask = this.convertToStrategicTask(task);
-        
-        if (!activeQueue.areDependenciesMet(strategicTask)) {
-          const unmetDeps = activeQueue.getUnmetDependencies(strategicTask);
-          return Result.fail(`Task ${task.getId()} has unmet dependencies: ${unmetDeps.join(', ')}`);
-        }
-        
         // Priority handling - optimize for high priority tasks
         const priority = task.getPriority();
         if (this.isHighPriority(priority) && activeQueue.size() > 10) {
           // Fast-track high priority tasks
-          activeQueue.optimizeForHighPriority();
           await this.optimizeForHighPriority(task);
         }
       }
@@ -303,9 +295,8 @@ export class BrowserExecutionService implements ExecutionService {
       
       if (activeQueue) {
         // Enqueue all tasks with dependencies
-        tasks.forEach((task, index) => {
+        tasks.forEach((task) => {
           const strategicTask = this.convertToStrategicTask(task);
-          strategicTask.dependencies = index > 0 ? [tasks[index - 1].getId().toString()] : [];
           
           if (this.isHighPriority(task.getPriority())) {
             activeQueue.enqueuePriority(strategicTask);
@@ -788,52 +779,10 @@ export class BrowserExecutionService implements ExecutionService {
   private convertToStrategicTask(task: Task): StrategicTask {
     return {
       id: task.getId().toString(),
-      name: task.getDescription(),
+      step: 1,
       description: task.getDescription(),
-      intent: this.mapIntentToStrategic(task.getIntent()),
-      targetConcept: this.extractTargetConcept(task),
-      expectedOutcome: this.buildExpectedOutcome(task),
-      inputData: this.extractInputData(task),
-      dependencies: [],
-      maxAttempts: task.getMaxRetries(),
-      priority: this.getPriorityValue(task.getPriority()),
-      acceptableOutcomes: this.defineAcceptableOutcomes(task),
-      requiredEvidence: this.defineRequiredEvidence(task.getIntent()),
-      optionalEvidence: this.defineOptionalEvidence(task.getIntent()),
-      minSuccessConfidence: this.getConfidenceThreshold(task),
-      allowPartialSuccess: this.allowsPartialSuccess(task)
+      expectedOutcome: this.buildExpectedOutcome(task)
     };
-  }
-
-  private mapIntentToStrategic(intent: any): StrategicTask['intent'] {
-    const intentMap: Record<string, StrategicTask['intent']> = {
-      'Search': 'search',
-      'Navigate': 'navigate',
-      'Extract': 'extract',
-      'Authenticate': 'authenticate',
-      'Filter': 'filter',
-      'Verify': 'verify',
-      'Interact': 'interact'
-    };
-    
-    const intentStr = intent?.toString() || 'interact';
-    return intentMap[intentStr] || 'interact';
-  }
-
-  private extractTargetConcept(task: Task): string {
-    const description = task.getDescription().toLowerCase();
-    const conceptPatterns = [
-      /(?:click|select|find|locate)\s+(.+)/,
-      /(?:enter|type|fill)\s+.+\s+(?:in|into)\s+(.+)/,
-      /(?:extract|get|capture)\s+(.+)/
-    ];
-    
-    for (const pattern of conceptPatterns) {
-      const match = description.match(pattern);
-      if (match) return match[1];
-    }
-    
-    return task.getDescription();
   }
 
   private buildExpectedOutcome(task: Task): string {
@@ -853,56 +802,6 @@ export class BrowserExecutionService implements ExecutionService {
     return outcomeTemplates[intent] || `Task completed: ${description}`;
   }
 
-  private extractInputData(task: Task): any {
-    return (task as any).inputData || undefined;
-  }
-
-  private defineAcceptableOutcomes(task: Task): string[] {
-    const intent = task.getIntent()?.toString() || 'interact';
-    
-    const outcomesMap: Record<string, string[]> = {
-      'search': ['results displayed', 'no results found', 'search suggestions shown'],
-      'navigate': ['page loaded', 'redirected to login', 'navigation completed'],
-      'extract': ['data captured', 'partial data captured', 'no data available'],
-      'authenticate': ['login successful', 'already authenticated'],
-      'filter': ['filters applied', 'results updated', 'no matches found'],
-      'verify': ['condition met', 'condition not met', 'verification completed'],
-      'interact': ['action completed', 'element updated', 'state changed']
-    };
-    
-    return outcomesMap[intent] || ['task completed'];
-  }
-
-  private defineRequiredEvidence(intent: any): string[] {
-    const intentStr = intent?.toString() || 'interact';
-    const evidenceMap: Record<string, string[]> = {
-      'search': ['search_input_filled', 'search_submitted'],
-      'navigate': ['page_loaded', 'url_changed'],
-      'extract': ['data_captured', 'elements_found'],
-      'authenticate': ['login_successful', 'session_established'],
-      'filter': ['filter_applied', 'results_updated'],
-      'verify': ['condition_checked', 'assertion_passed'],
-      'interact': ['element_clicked', 'action_completed']
-    };
-    
-    return evidenceMap[intentStr] || ['action_completed'];
-  }
-
-  private defineOptionalEvidence(intent: any): string[] {
-    const intentStr = intent?.toString() || 'interact';
-    const optionalMap: Record<string, string[]> = {
-      'search': ['autocomplete_shown', 'search_history_displayed'],
-      'navigate': ['page_title_changed', 'breadcrumb_updated'],
-      'extract': ['all_fields_found', 'validation_passed'],
-      'authenticate': ['remember_me_checked', 'two_factor_completed'],
-      'filter': ['count_updated', 'url_params_changed'],
-      'verify': ['screenshot_captured', 'comparison_logged'],
-      'interact': ['animation_completed', 'feedback_shown']
-    };
-    
-    return optionalMap[intentStr] || [];
-  }
-
   private isHighPriority(priority: any): boolean {
     if (typeof (priority as any).isHigh === 'function') {
       return (priority as any).isHigh();
@@ -918,20 +817,6 @@ export class BrowserExecutionService implements ExecutionService {
       return (priority as any).value;
     }
     return 5;
-  }
-
-  private getConfidenceThreshold(task: Task): number {
-    const priority = this.getPriorityValue(task.getPriority());
-    if (priority >= 8) return 0.9;
-    if (priority >= 5) return 0.7;
-    return 0.5;
-  }
-
-  private allowsPartialSuccess(task: Task): boolean {
-    const intent = task.getIntent()?.toString() || 'interact';
-    const priority = this.getPriorityValue(task.getPriority());
-    
-    return intent === 'extract' && priority < 7;
   }
 
   private async optimizeForHighPriority(_task: Task): Promise<void> {
@@ -950,7 +835,7 @@ export class BrowserExecutionService implements ExecutionService {
     let allTasksSucceeded = true;
 
     // Execute ready tasks from queue
-    const readyTasks = queue.getReadyTasks();
+    const readyTasks = queue.getAllTasks();
     
     for (const strategicTask of readyTasks) {
       const task = this.findTaskById(strategicTask.id, step);

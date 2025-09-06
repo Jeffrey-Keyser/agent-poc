@@ -4,7 +4,6 @@ import { AgentReporter } from '../interfaces/agent-reporter.interface';
 import { EnhancedEventBusInterface } from '../interfaces/event-bus.interface';
 import { ITaskPlanner, ITaskExecutor, ITaskEvaluator, ITaskSummarizer } from '../interfaces/agent.interface';
 import { 
-  PlannerConfig, 
   ExecutorConfig, 
   EvaluatorConfig
 } from '../types/agent-types';
@@ -26,8 +25,8 @@ export class AgentFactory {
    * Create a Task Planner Agent configured for strategic planning
    * Uses higher-capability models for complex reasoning tasks
    */
-  static createPlanner(config: PlannerConfig): ITaskPlanner {
-    return new TaskPlannerAgent(config.llm, config);
+  static createPlanner(llm: LLM): ITaskPlanner {
+    return new TaskPlannerAgent(llm);
   }
 
   /**

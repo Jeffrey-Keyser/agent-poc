@@ -17,7 +17,8 @@ import {
   PlanningService, 
   ExecutionService, 
   EvaluationService,
-  PlanningContext
+  PlanningContext,
+  AITaskPlanningService
 } from '../domain-services';
 import { 
   WorkflowEventBus,
@@ -57,6 +58,7 @@ import {
   WorkflowAggregate,
   ExecutionAggregate
 } from '../aggregates';
+import { LLM } from '../types';
 
 export interface WorkflowManagerConfig {
   maxRetries?: number;
@@ -96,6 +98,7 @@ export class WorkflowManager {
   private summarizer?: ITaskSummarizer;
   private errors: string[] = [];
 
+  private planningService: PlanningService;
   private workflowEventBus: WorkflowEventBus;
   private metricsHandler: WorkflowMetricsHandler;
   private loggingHandler: WorkflowLoggingHandler;
@@ -105,7 +108,7 @@ export class WorkflowManager {
   private workflowSaga: WorkflowSaga;
 
   constructor(
-    private planningService: PlanningService,
+    private llm: LLM, // I think ideally this would be abstracted away at the factory level
     private executionService: ExecutionService,
     private evaluationService: EvaluationService,
     private workflowRepository: WorkflowRepository,
@@ -133,6 +136,11 @@ export class WorkflowManager {
     if (config.summarizer) {
       this.summarizer = config.summarizer;
     }
+    this.planningService = new AITaskPlanningService(
+      this.stateManager,
+      this.llm,
+      this.memoryService
+    );
     this.setupStateManagerEventListeners();
     this.connectDomainEventsToMonitor();
     
@@ -161,65 +169,14 @@ export class WorkflowManager {
     this.reporter.log('📡 Domain event handlers registered: metrics, logging, task-failure, workflow-stuck, saga');
   }
 
-
-  private createWorkflowAggregate(workflow: Workflow, plan: Plan): Result<WorkflowAggregate> {
-    const sessionResult = Session.createDefault(workflow.getId());
-    if (sessionResult.isFailure()) {
-      return Result.fail(`Failed to create session: ${sessionResult.getError()}`);
-    }
-
-    const aggregateResult = WorkflowAggregate.create(
-      workflow,
-      plan,
-      sessionResult.getValue()
-    );
-    
-    if (aggregateResult.isFailure()) {
-      return Result.fail(`Failed to create workflow aggregate: ${aggregateResult.getError()}`);
-    }
-
-    return aggregateResult;
-  }
-
-  private createExecutionAggregate(): Result<ExecutionAggregate> {
-    if (!this.workflow) {
-      return Result.fail('Workflow must exist before creating execution aggregate');
-    }
-
-    // Create execution context
-    const sessionId = SessionId.generate();
-    const viewport = Viewport.create(1920, 1080).getValue();
-    const contextResult = ExecutionContext.create(
-      sessionId,
-      this.workflow.getId(),
-      this.workflow.startUrl,
-      viewport
-    );
-    
-    if (contextResult.isFailure()) {
-      return Result.fail(`Failed to create execution context: ${contextResult.getError()}`);
-    }
-
-    const aggregateResult = ExecutionAggregate.create(contextResult.getValue());
-    if (aggregateResult.isFailure()) {
-      return Result.fail(`Failed to create execution aggregate: ${aggregateResult.getError()}`);
-    }
-
-    const executionAggregate = aggregateResult.getValue();
-    executionAggregate.setStateManager(this.stateManager);
-
-    return Result.ok(executionAggregate);
-  }
-
   async execute(goal: string, startUrl?: string): Promise<WorkflowResult> {
     this.startTime = new Date();
     this.currentGoal = goal;
     this.reporter.log(`🚀 Starting workflow: ${goal}`);
     
     try {
+      await this.initializePlan(goal, startUrl);
       await this.setupAggregates();
-
-      await this.initializeWorkflow(goal, startUrl);
 
       this.currentStrategy = this.createStrategyFromPlan(this.currentGoal, this.currentPlan!);
       const successfullyCompletedSteps = await this.executeWorkflowSteps();
@@ -240,7 +197,7 @@ export class WorkflowManager {
   /**
    * Initialize workflow, create plan, and launch browser
    */
-  private async initializeWorkflow(goal: string, startUrl?: string): Promise<void> {
+  private async initializePlan(goal: string, startUrl?: string): Promise<void> {
     const initialUrl = startUrl || '';
     const variables: Variable[] = [];
     
@@ -262,14 +219,12 @@ export class WorkflowManager {
     
     // Create plan
     const currentUrl = this.browser.getPageUrl();
-    const planResult = await this.createPlanWithDomainService(goal, currentUrl);
+    const planResult = await this.createPlan(goal, currentUrl);
     if (planResult.isFailure()) {
       throw new Error(`Domain planning failed: ${planResult.getError()}`);
     }
     
     this.currentPlan = planResult.getValue();
-    this.reporter.log(`📋 Domain service created plan with ${this.currentPlan.getSteps().length} steps`);
-    
     // Save plan to repository
     await this.planRepository.save(this.currentPlan);
     this.reporter.log(`💾 Plan saved to repository: ${this.currentPlan.getId().toString()}`);
@@ -283,19 +238,45 @@ export class WorkflowManager {
       throw new Error('Workflow and plan must be initialized before setting up aggregates');
     }
     
-    // Create workflow aggregate
-    const workflowAggregateResult = this.createWorkflowAggregate(this.workflow, this.currentPlan);
+    // Create session for workflow aggregate
+    const sessionResult = Session.createDefault(this.workflow.getId());
+    if (sessionResult.isFailure()) {
+      throw new Error(`Failed to create session: ${sessionResult.getError()}`);
+    }
+    
+    // Create workflow aggregate using its static factory method
+    const workflowAggregateResult = WorkflowAggregate.create(
+      this.workflow,
+      this.currentPlan,
+      sessionResult.getValue()
+    );
     if (workflowAggregateResult.isFailure()) {
       throw new Error(`Failed to create workflow aggregate: ${workflowAggregateResult.getError()}`);
     }
     this.workflowAggregate = workflowAggregateResult.getValue();
     
-    // Create execution aggregate
-    const executionAggregateResult = this.createExecutionAggregate();
+    // Create execution context for execution aggregate
+    const sessionId = SessionId.generate();
+    const viewport = Viewport.create(1920, 1080).getValue();
+    const contextResult = ExecutionContext.create(
+      sessionId,
+      this.workflow.getId(),
+      this.workflow.startUrl,
+      viewport
+    );
+    if (contextResult.isFailure()) {
+      throw new Error(`Failed to create execution context: ${contextResult.getError()}`);
+    }
+    
+    // Create execution aggregate using its static factory method
+    const executionAggregateResult = ExecutionAggregate.create(contextResult.getValue());
     if (executionAggregateResult.isFailure()) {
       throw new Error(`Failed to create execution aggregate: ${executionAggregateResult.getError()}`);
     }
     this.executionAggregate = executionAggregateResult.getValue();
+    
+    // Set state manager on execution aggregate
+    this.executionAggregate.setStateManager(this.stateManager);
     
     // Start workflow execution
     const startResult = this.workflowAggregate.startExecution();
@@ -314,15 +295,9 @@ export class WorkflowManager {
       goal,
       steps: plan.getSteps().map((step, index) => ({
         id: step.getId().toString(),
-        name: step.getDescription(),
+        step: index + 1,
         description: step.getDescription(),
-        intent: 'interact' as const,
-        targetConcept: step.getDescription(),
-        priority: index + 1,
-        confidence: step.getConfidence().getValue(),
-        expectedOutcome: step.getDescription(),
-        dependencies: [],
-        maxAttempts: 3
+        expectedOutcome: step.getDescription()
       })),
       createdAt: new Date(),
       currentStepIndex: 0
@@ -590,15 +565,9 @@ export class WorkflowManager {
   private createStrategicTaskFromTask(task: any): StrategicTask {
     return {
       id: task.getId().toString(),
-      name: task.getDescription(),
+      step: 1,
       description: task.getDescription(),
-      intent: 'interact' as const,
-      targetConcept: 'page element',
-      inputData: null,
-      expectedOutcome: task.getDescription(),
-      dependencies: [],
-      maxAttempts: task.getMaxRetries() + 1,
-      priority: 1
+      expectedOutcome: task.getDescription()
     };
   }
 
@@ -915,10 +884,7 @@ export class WorkflowManager {
         goal: this.currentGoal,
         url: stateContext.currentUrl,
         existingPageState: (currentState as any).pageContent,
-        previousAttempts: [], // Could be populated from memory service
-        availableActions: stateContext.availableActions,
-        userInstructions: this.currentGoal,
-        timeConstraints: this.config.timeout || 300000
+        previousAttempts: []
       };
       
       if (this.workflow) {
@@ -928,7 +894,6 @@ export class WorkflowManager {
       const planResult = await this.planningService.createPlan(this.currentGoal, planningContext);
       if (planResult.isSuccess()) {
         const plan = planResult.getValue();
-        this.reporter.log(`📋 Domain service created new plan with ${plan.getSteps().length} steps based on current state`);
         return plan;
       } else {
         this.reporter.log(`❌ Failed to replan with domain service: ${planResult.getError()}`);
@@ -1019,15 +984,9 @@ export class WorkflowManager {
       completedTasks: Array.from(this.completedSteps.keys()),
       completedSteps: Array.from(this.completedSteps.values()).map(result => ({
         id: result.stepId,
-        name: result.stepId,
+        step: 1,
         description: `Completed step: ${result.stepId}`,
-        intent: 'completed' as any,
-        targetConcept: 'completed',
-        inputData: null,
-        expectedOutcome: 'completed',
-        dependencies: [],
-        maxAttempts: 1,
-        priority: 1
+        expectedOutcome: 'completed'
       })),
       failedTasks: Array.from(this.completedSteps.values()).filter(r => !r.success).map(r => r.stepId),
       totalDuration: duration,
@@ -1209,15 +1168,11 @@ export class WorkflowManager {
       currentUrl: currentUrlObj,
       pageState: null, // Will be set by caller if needed
       workflowId: this.workflow?.getId(),
-      executionContext: this.executionAggregate?.getContext(),
-      timeConstraints: 30000
+      executionContext: this.executionAggregate?.getContext()
     };
   }
 
-  /**
-   * Creates a plan using the domain planning service
-   */
-  private async createPlanWithDomainService(goal: string, currentUrl: string): Promise<Result<Plan>> {
+  private async createPlan(goal: string, currentUrl: string): Promise<Result<Plan>> {
     try {
       const currentState = await this.captureSemanticState();
       
@@ -1226,9 +1181,6 @@ export class WorkflowManager {
         url: currentUrl,
         existingPageState: (currentState as any).pageContent,
         previousAttempts: [], // Could be populated from memory service
-        availableActions: ['click', 'type', 'navigate', 'extract', 'wait'],
-        userInstructions: goal,
-        timeConstraints: this.config.timeout || 300000
       };
       
       if (this.workflow) {

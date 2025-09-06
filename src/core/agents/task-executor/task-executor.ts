@@ -137,7 +137,6 @@ export class TaskExecutorAgent implements ITaskExecutor {
       input &&
       input.task &&
       typeof input.task.id === 'string' &&
-      typeof input.task.intent === 'string' &&
       input.pageState &&
       typeof input.pageState.url === 'string'
     );
@@ -174,8 +173,6 @@ export class TaskExecutorAgent implements ITaskExecutor {
     // Interpolate variables in strategic task data if variable manager is available
     const interpolatedDescription = variableManager ? 
       variableManager.interpolate(strategicTask.description) : strategicTask.description;
-    const interpolatedInputData = variableManager && strategicTask.inputData ? 
-      this.interpolateObjectValues(strategicTask.inputData, variableManager) : strategicTask.inputData;
     const interpolatedExpectedOutcome = variableManager ? 
       variableManager.interpolate(strategicTask.expectedOutcome) : strategicTask.expectedOutcome;
 
@@ -187,7 +184,6 @@ STRATEGIC TASK TO EXECUTE:
 Intent: ${strategicTask.intent}
 Description: ${interpolatedDescription}
 Target Concept: ${strategicTask.targetConcept}
-Input Data: ${JSON.stringify(interpolatedInputData)}
 Expected Outcome: ${interpolatedExpectedOutcome}
 
 ${visualContext?.pixelAbove ? `... ${visualContext.pixelAbove} PIXELS ABOVE - SCROLL UP TO SEE MORE` : ''}

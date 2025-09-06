@@ -7,10 +7,8 @@ import { WorkflowManager } from '../services/workflow-manager';
 import { DomService } from '@/infra/services/dom-service';
 import { TaskSummarizerAgent } from '../agents/task-summarizer';
 import { 
-  AITaskPlanningService,
   BrowserExecutionService, 
   AIEvaluationService,
-  PlanningService,
   ExecutionService, 
   EvaluationService
 } from '../../infrastructure/services';
@@ -69,7 +67,6 @@ interface Infrastructure {
  * Domain services bundle
  */
 interface Services {
-  planningService: PlanningService;
   executionService: ExecutionService;
   evaluationService: EvaluationService;
 }
@@ -105,7 +102,7 @@ export class WorkflowFactory {
     const repositories = this.createRepositories(config);
     
     return new WorkflowManager(
-      services.planningService,
+      config.llm,
       services.executionService,
       services.evaluationService,
       repositories.workflowRepository,
@@ -131,15 +128,6 @@ export class WorkflowFactory {
     infrastructure: Infrastructure, 
     config: WorkflowConfig
   ): Services {
-    const planningService = new AITaskPlanningService(
-      config.llm,
-      {
-        llm: config.llm,
-        model: config.models?.planner || 'gpt-5-nano',
-        maxRetries: config.maxRetries || 3
-      }
-    );
-
     const executionService = new BrowserExecutionService(
       config.llm,
       infrastructure.browser,
@@ -163,7 +151,6 @@ export class WorkflowFactory {
     );
 
     return {
-      planningService,
       executionService,
       evaluationService
     };

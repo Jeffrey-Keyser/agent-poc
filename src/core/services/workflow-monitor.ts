@@ -162,7 +162,6 @@ export class WorkflowMonitor {
 
   private onStepStart(event: StepEvent): void {
     this.reporter.log(`⚡ Executing step: ${event.step.description}`);
-    this.reporter.log(`🎯 Intent: ${event.step.intent} | Target: ${event.step.targetConcept}`);
   }
 
   private onStepComplete(event: StepEvent): void {
@@ -195,21 +194,21 @@ export class WorkflowMonitor {
   }
 
   private onTaskStart(event: TaskEvent): void {
-    this.reporter.log(`🔄 Starting task execution: ${event.task.name || event.task.description}`);
+    this.reporter.log(`🔄 Starting task execution: ${event.task.description}`);
   }
 
   private onTaskComplete(event: TaskEvent): void {
     const status = event.result?.status === 'success' ? '✅' : '❌';
     const duration = event.result?.duration ? this.formatDuration(event.result.duration) : 'unknown';
     
-    this.reporter.log(`${status} Task: ${event.task.name || event.task.description} (${duration})`);
+    this.reporter.log(`${status} Task: ${event.task.description} (${duration})`);
   }
 
   private onTaskFailed(event: TaskEvent): void {
     this.metrics.errorCount++;
     const duration = event.result?.duration ? this.formatDuration(event.result.duration) : 'unknown';
     
-    this.reporter.log(`❌ Task failed: ${event.task.name || event.task.description} (${duration})`);
+    this.reporter.log(`❌ Task failed: ${event.task.description} (${duration})`);
     if (event.result?.errorReason) {
       this.reporter.log(`💡 Failure reason: ${event.result.errorReason}`);
     }
@@ -229,19 +228,19 @@ export class WorkflowMonitor {
       event.queueSize
     );
     
-    this.reporter.log(`📥 Task enqueued: ${event.task.name} (Queue: ${event.queueSize}, Ready: ${event.readyCount}, Blocked: ${event.blockedCount})`);
+    this.reporter.log(`📥 Task enqueued: ${event.task.description} (Queue: ${event.queueSize}, Ready: ${event.readyCount}, Blocked: ${event.blockedCount})`);
   }
   
   private onTaskDequeued(event: { task: StrategicTask; remainingSize: number }): void {
     this.queueMetrics.totalDequeued++;
     
-    this.reporter.log(`📤 Task dequeued: ${event.task.name} (Remaining: ${event.remainingSize})`);
+    this.reporter.log(`📤 Task dequeued: ${event.task.description} (Remaining: ${event.remainingSize})`);
   }
 
   private onTaskBlocked(event: BlockedTaskEvent): void {
     this.queueMetrics.totalBlocked++;
     
-    this.reporter.log(`🚫 Task blocked: ${event.task.name} (Dependencies: ${event.dependencies.join(', ')})`);
+    this.reporter.log(`🚫 Task blocked: ${event.task.description} (Dependencies: ${event.dependencies.join(', ')})`);
   }
   
   private onQueueTaskCompleted(event: { taskId: string; completedCount: number }): void {

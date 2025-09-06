@@ -1,5 +1,4 @@
 export * from '@/core/agents/feedback-agent/feedback-agent.types';
-export * from '@/core/entities/openator-result';
 export * from '@/core/value-objects/variable-string';
 export { Variable } from '@/core/value-objects/variable';
 export * from '@/core/interfaces/agent-reporter.interface';

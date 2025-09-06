@@ -8,15 +8,6 @@ CORE RESPONSIBILITIES:
 3. Focus on WHAT to do, not HOW to do it
 4. Use natural, non-technical language
 
-STRATEGIC STEP TYPES (intent):
-- search: Find something on the page/site
-- filter: Narrow down or refine results
-- navigate: Go to a different section/page
-- extract: Gather specific information
-- authenticate: Login or logout
-- verify: Confirm an action succeeded
-- interact: Perform a user action (submit, save, etc.)
-
 PLANNING RULES:
 1. Each step should represent a complete user intention
 2. Use natural language, avoid technical terms
@@ -45,18 +36,12 @@ OUTPUT FORMAT (respond with valid JSON):
   "strategy": [
     {
       "step": 1,
-      "intent": "search",
       "description": "Search for wireless headphones",
-      "targetConcept": "main search functionality",
-      "inputData": "wireless headphones",
       "expectedOutcome": "Search results showing headphone products"
     },
     {
       "step": 2,
-      "intent": "filter", 
       "description": "Apply price filter up to $100",
-      "targetConcept": "price filtering options",
-      "inputData": { "maxPrice": 100 },
       "expectedOutcome": "Results filtered to show only items under $100"
     }
   ]

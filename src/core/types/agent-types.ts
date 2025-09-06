@@ -1,20 +1,9 @@
 // Strategic level - what the Planner creates
 export interface StrategicTask {
   id: string;
-  name: string;
+  step: number;
   description: string;
-  intent: 'search' | 'filter' | 'navigate' | 'extract' | 'authenticate' | 'verify' | 'interact';
-  targetConcept: string; // e.g., "search box", "price filter", "results list" - NOT selectors
-  inputData?: any; // High-level data, e.g., "wireless headphones", "$100"
-  expectedOutcome: string; // User-observable outcome, not technical details
-  dependencies: string[];
-  maxAttempts: number;
-  priority: number;
-  acceptableOutcomes?: string[];     // Alternative acceptable outcomes
-  requiredEvidence?: string[];       // Must-have evidence for success
-  optionalEvidence?: string[];       // Nice-to-have evidence
-  minSuccessConfidence?: number;     // Minimum confidence for success (default 0.7)
-  allowPartialSuccess?: boolean;     // Can this step succeed partially?
+  expectedOutcome: string;
 }
 
 // Tactical level - what the Executor creates at runtime
@@ -91,15 +80,6 @@ export interface ActionResult {
   duration?: number;
   timestamp: Date;
   extractedValue?: any; // Value extracted if action type was 'extract'
-}
-
-// Configuration types
-export interface PlannerConfig {
-  llm: any; // LLM interface reference
-  model: string;
-  maxRetries?: number;
-  // Deprecated: keeping for backward compatibility
-  apiKey?: string;
 }
 
 export interface ExecutorConfig {
@@ -232,6 +212,6 @@ export interface BrowserState {
 export interface InteractionContext {
   element: DOMElement;
   pageState: PageState;
-  intent: StrategicTask['intent'];
+  intent: StrategicTask;
   previousActions: MicroAction[];
 }

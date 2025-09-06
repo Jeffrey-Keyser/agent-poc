@@ -18,7 +18,7 @@ import { Task, Step, Result, TaskResult } from '../../core/entities';
 import { Evidence, Confidence, ExtractionSchema } from '../../core/value-objects';
 import { LLM } from '../../core/interfaces/llm.interface';
 import { TaskEvaluatorAgent } from '../../core/agents/task-evaluator/task-evaluator';
-import { EvaluatorConfig } from '../../core/types/agent-types';
+import { EvaluatorConfig, StrategicTask } from '../../core/types/agent-types';
 
 /**
  * Infrastructure implementation of EvaluationService that bridges to the existing TaskEvaluatorAgent
@@ -165,17 +165,11 @@ export class AIEvaluationService implements EvaluationService {
     context: EvaluationContext
   ): Promise<Result<ScreenshotAnalysis>> {
     try {
-      // Use the existing TaskEvaluatorAgent's screenshot analysis capabilities
-      const strategicTask = {
+      const strategicTask: StrategicTask = {
         id: 'screenshot-analysis',
-        name: 'Screenshot Analysis',
+        step: 1,
         description: `Analyze screenshot for: ${expectedOutcome}`,
-        intent: 'verify' as const,
-        targetConcept: expectedOutcome,
         expectedOutcome: `Screenshot should show: ${expectedOutcome}`,
-        dependencies: [],
-        maxAttempts: 1,
-        priority: 1
       };
 
       const currentPageState = {

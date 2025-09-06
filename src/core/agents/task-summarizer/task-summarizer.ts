@@ -98,7 +98,7 @@ EXECUTION SUMMARY:
 - Final URL: ${input.url || 'Not provided'}
 
 STRATEGIC PLAN:
-${input.plan.map((task, i) => `${i + 1}. ${task.name} - ${task.expectedOutcome}`).join('\n')}
+${input.plan.map((task, i) => `${i + 1}. ${task.description} - ${task.expectedOutcome}`).join('\n')}
 
 STEP RESULTS:
 ${input.completedSteps.map(step => 

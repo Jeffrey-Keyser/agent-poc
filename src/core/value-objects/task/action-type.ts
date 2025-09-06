@@ -248,26 +248,6 @@ export class ActionType {
   }
 
   /**
-   * Checks if this action requires input data
-   */
-  requiresInputData(): boolean {
-    const inputRequiredActions: ActionTypeValue[] = [
-      'type-text',
-      'upload-file',
-      'select-option',
-      'navigate-url',
-      'wait-for-text',
-      'wait-for-url',
-      'verify-text-present',
-      'verify-text-absent',
-      'verify-url-matches',
-      'verify-title-matches'
-    ];
-
-    return inputRequiredActions.includes(this.value);
-  }
-
-  /**
    * Checks if this action modifies page state
    */
   isModifying(): boolean {

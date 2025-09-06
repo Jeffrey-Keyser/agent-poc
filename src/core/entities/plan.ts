@@ -17,14 +17,12 @@ export class Plan {
     steps: Step[]
   ) {
     this.id = id;
-    this.steps = [...steps]; // Create a copy to maintain encapsulation
+    this.steps = [...steps];
     this.createdAt = new Date();
     this.updatedAt = new Date();
     
-    // Validate steps are in correct order
     this.validateStepOrder();
     
-    // Record plan creation event
     this.recordEvent(new PlanCreatedEvent(
       this.workflowId,
       this.id,
@@ -61,7 +59,7 @@ export class Plan {
     return this.workflowId;
   }
 
-  getSteps(): ReadonlyArray<Step> {
+  getSteps(): Array<Step> {
     return this.steps;
   }
 

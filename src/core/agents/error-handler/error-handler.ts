@@ -86,8 +86,6 @@ OUTPUT FORMAT:
 FAILURE ANALYSIS:
 
 Task: ${context.task.description}
-Intent: ${context.task.intent}
-Target: ${context.task.targetConcept}
 Expected: ${context.task.expectedOutcome}
 
 Failure Details:

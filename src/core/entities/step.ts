@@ -127,7 +127,6 @@ export class Step {
     return this.status !== StepStatus.Pending;
   }
 
-  // Task management
   addTask(task: Task): Result<void> {
     if (this.status === StepStatus.Completed) {
       return Result.fail('Cannot add task to completed step');

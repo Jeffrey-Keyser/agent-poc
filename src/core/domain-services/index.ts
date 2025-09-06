@@ -11,8 +11,6 @@ export {
   PlanValidationResult,
   ValidationIssue,
   PlanComplexityEstimate,
-  MemoryService,
-  LearnedPattern
 } from './planning-service';
 
 // Execution Domain Service - Handles task and step execution in web automation
@@ -55,27 +53,6 @@ export {
   ScreenshotService,
   VisionAnalysisService
 } from './evaluation-service';
-
-// Workflow Orchestration Service - Coordinates all domain services for complete workflow execution
-export {
-  WorkflowOrchestrationService,
-  OrchestrationConfig,
-  ErrorRecoveryStrategy,
-  OrchestrationContext,
-  OrchestrationMetrics,
-  OrchestrationError,
-  ExecutionPhase,
-  ExecutionStatus,
-  HealthStatus,
-  ExecutionIssue,
-  EnhancedWorkflowResult,
-  ExecutionPhaseRecord,
-  PlanEvolutionRecord,
-  PlanChange,
-  AdaptationRecord,
-  ExecutionReport,
-  ErrorHandlingService
-} from './workflow-orchestration-service';
 
 // Re-export key interfaces and types from entities and value objects for convenience
 export { Result } from '../entities/result';

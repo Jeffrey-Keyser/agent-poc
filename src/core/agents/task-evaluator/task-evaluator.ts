@@ -98,15 +98,6 @@ export class TaskEvaluatorAgent implements ITaskEvaluator {
       output.achievedAlternative = evaluation.achievedAlternative;
     }
 
-    // NEW: Apply flexible success criteria
-    if (!output.success && input.step.allowPartialSuccess) {
-      // Check if we have enough for partial success
-      if (output.confidence >= (input.step.minSuccessConfidence || 0.5)) {
-        output.success = true;
-        output.partialSuccess = true;
-        output.reason = `Partial success: ${output.reason}`;
-      }
-    }
 
     if (!this.validateOutput(output)) {
       throw new Error('Generated invalid evaluator output');
@@ -153,7 +144,7 @@ export class TaskEvaluatorAgent implements ITaskEvaluator {
     const stateComparison = this.buildStateComparison(beforeState, afterState);
     
     // Special emphasis for extraction tasks
-    const extractionGuidance = step.intent === 'extract' ? `
+    const extractionGuidance = microActions.some(action => action.type === 'extract') ? `
 IMPORTANT: This is an EXTRACTION task. Success is determined by:
 1. Whether data was successfully extracted and stored in extractedData
 2. The presence of meaningful content in the extracted data
@@ -169,11 +160,8 @@ Extracted Data Present: ${afterState.extractedData && Object.keys(afterState.ext
 STRATEGIC TASK EVALUATION:
 
 TASK DETAILS:
-- Intent: ${step.intent}
 - Description: ${step.description}
-- Target Concept: ${step.targetConcept}
 - Expected Outcome: ${step.expectedOutcome}
-- Input Data: ${JSON.stringify(step.inputData)}
 ${flexibleCriteria}
 ${extractionGuidance}
 EXECUTION RESULTS:
@@ -188,7 +176,7 @@ ${this.calculateSuccessRate(results)} (${results.filter(r => r.success).length}/
 ${input.screenshots ? 'VISUAL EVIDENCE:\nCompare the before and after screenshots to verify task completion.' : ''}
 
 Based on this information, evaluate whether the STRATEGIC TASK was completed successfully.
-${step.intent === 'extract' ? 'For extraction tasks: If meaningful data was extracted, the task is successful.' : 'Remember: Focus on whether the expected outcome was achieved, not just whether micro-actions executed.'}
+${microActions.some(action => action.type === 'extract') ? 'For extraction tasks: If meaningful data was extracted, the task is successful.' : 'Remember: Focus on whether the expected outcome was achieved, not just whether micro-actions executed.'}
 
 Your response must be valid JSON in the specified format.
     `;
