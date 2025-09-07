@@ -54,7 +54,9 @@ import {
   SessionId,
   Viewport,
   Evidence,
-  PageState as PageStateVO
+  Priority,
+  TaskId,
+  Intent
 } from '../value-objects';
 import {
   WorkflowAggregate,
@@ -67,13 +69,8 @@ export interface WorkflowManagerConfig {
   timeout?: number;
   enableReplanning?: boolean;
   variableManager?: VariableManager;
-  summarizer?: ITaskSummarizer;
-  maxReplansPerStep?: number; 
-  maxTotalReplans?: number;
   allowEarlyExit?: boolean;
   minAcceptableCompletion?: number;
-  criticalSteps?: string[];
-  stateManager?: StateManager;
 }
 
 interface StateChangeAnalysis {
@@ -94,10 +91,8 @@ export class WorkflowManager {
   private currentStrategy: StrategicPlan | null = null;
   private completedSteps: Map<string, StepResult> = new Map();
   private startTime: Date | null = null;
-  private extractedData: any = {};
   private stateManager: StateManager;
   private memoryService: MemoryService;
-  private summarizer?: ITaskSummarizer;
   private errors: string[] = [];
 
   private planningService: PlanningService;
@@ -120,24 +115,20 @@ export class WorkflowManager {
     private browser: Browser,
     private domService: DomService,
     private reporter: AgentReporter,
+    private summarizer: ITaskSummarizer,
     private config: WorkflowManagerConfig = {}
   ) {
     this.config = {
       maxRetries: 3,
       timeout: 300000,
       enableReplanning: true,
-      maxReplansPerStep: 3,
       allowEarlyExit: false,
       minAcceptableCompletion: 60,
-      criticalSteps: [],
       ...config
     };
     
     this.stateManager = new StateManager(this.browser, this.domService);
     this.memoryService = new MemoryService(this.eventBus, this.memoryRepository);
-    if (config.summarizer) {
-      this.summarizer = config.summarizer;
-    }
     this.planningService = new AITaskPlanningService(
       this.stateManager,
       this.llm,
@@ -157,6 +148,7 @@ export class WorkflowManager {
     this.loggingHandler = handlers.logging;
     this.taskFailureHandler = handlers.taskFailure;
     this.workflowStuckHandler = handlers.workflowStuck;
+    this.summarizer = summarizer;
     
     // Create and register workflow saga
     this.workflowSaga = SagaFactory.createWorkflowSaga(this.reporter);
@@ -240,7 +232,6 @@ export class WorkflowManager {
       throw new Error('Workflow and plan must be initialized before setting up aggregates');
     }
     
-    // Create session for workflow aggregate
     const sessionResult = Session.createDefault(this.workflow.getId());
     if (sessionResult.isFailure()) {
       throw new Error(`Failed to create session: ${sessionResult.getError()}`);
@@ -271,13 +262,11 @@ export class WorkflowManager {
     }
     
     // Create execution aggregate using its static factory method
-    const executionAggregateResult = ExecutionAggregate.create(contextResult.getValue());
+    const executionAggregateResult = ExecutionAggregate.create(contextResult.getValue(), this.stateManager);
     if (executionAggregateResult.isFailure()) {
       throw new Error(`Failed to create execution aggregate: ${executionAggregateResult.getError()}`);
     }
     this.executionAggregate = executionAggregateResult.getValue();
-    
-    this.executionAggregate.setStateManager(this.stateManager);
     
     // Start workflow execution
     const startResult = this.workflowAggregate.startExecution();
@@ -349,23 +338,19 @@ export class WorkflowManager {
       return { stepSuccess: false, taskResults: [], successfulTasks: [] };
     }
     
-    const tasks = step.getTasks();
     const stepTaskResults: any[] = [];
     const successfulTasks: StrategicTask[] = [];
     
-    // Execute each task in the step
-    for (const task of tasks) {
-      const taskExecutionResult = await this.executeTask(task, step);
-      stepTaskResults.push(taskExecutionResult.result);
-      
-      if (taskExecutionResult.strategicTask) {
-        successfulTasks.push(taskExecutionResult.strategicTask);
-      }
-      
-      // Check if we should break early (replanning triggered)
-      if (taskExecutionResult.shouldBreak) {
-        break;
-      }
+    // TODO: Convert to tasks
+    const placeholderTask = Task.create(TaskId.generate(), Intent.click(), step.description, Priority.low(), 1, 5000);
+
+    const taskResult = placeholderTask.getValue();
+    step.addTask(taskResult);
+    const taskExecutionResult = await this.executeTask(taskResult, step);
+    stepTaskResults.push(taskExecutionResult.result);
+    
+    if (taskExecutionResult.strategicTask) {
+      successfulTasks.push(taskExecutionResult.strategicTask);
     }
     
     // Determine step success
@@ -395,31 +380,33 @@ export class WorkflowManager {
     strategicTask?: StrategicTask | undefined;
     shouldBreak: boolean;
   }> {
-    const startExecutionResult = this.executionAggregate!.startTaskExecution(task);
-    if (startExecutionResult.isFailure()) {
-      this.reporter.log(`Failed to start task: ${startExecutionResult.getError()}`);
-      return {
-        result: {
-          taskId: task.getId().toString(),
-          success: false,
-          error: startExecutionResult.getError(),
-          timestamp: new Date()
-        },
-        shouldBreak: false
-      };
-    }
+    // TODO: Setup this.
+    // const startExecutionResult = this.executionAggregate!.startTaskExecution(task);
+    // if (startExecutionResult.isFailure()) {
+    //   this.reporter.log(`Failed to start task: ${startExecutionResult.getError()}`);
+    //   return {
+    //     result: {
+    //       taskId: task.getId().toString(),
+    //       success: false,
+    //       error: startExecutionResult.getError(),
+    //       timestamp: new Date()
+    //     },
+    //     shouldBreak: false
+    //   };
+    // }
     
     this.reporter.log(`⚡ Executing task: ${task.getDescription()}`);
     const taskStartTime = Date.now();
     
     try {
       // Build execution context and execute task
-      const executionContext = await this.buildExecutionContext(task);
-      const executionResult = await this.executionService.executeTask(task, executionContext);
+      const executionResult = await this.executionService.executeTask(task);
       
       let taskResult: any;
+      let executionEvidence: Evidence[] = [];
       if (executionResult.isSuccess()) {
         const result = executionResult.getValue();
+        executionEvidence = result.evidence || [];
         
         // Evaluate the result
         const evaluationResult = await this.evaluationService.evaluateTaskCompletion(
@@ -453,7 +440,8 @@ export class WorkflowManager {
         strategicTask = this.createStrategicTaskFromTask(task);
         this.reporter.log(`✅ Task completed: ${task.getDescription()}`);
         
-        // Update execution context URL
+        await this.processExtractedDataFromEvidence(executionEvidence);
+        
         await this.updateExecutionContextUrl();
       } else {
         await this.handleTaskFailure(task, taskResult);
@@ -462,7 +450,6 @@ export class WorkflowManager {
       // Check for early exit or replanning  
       const shouldBreak = await this.checkPostTaskConditions(taskResult);
       
-      // Store successful steps in legacy completedSteps Map  
       if (taskResult.success && strategicTask) {
         const stepResult: StepResult = {
           stepId: task.getId().toString(),
@@ -498,7 +485,7 @@ export class WorkflowManager {
   /**
    * Record task execution in aggregate and workflow
    */
-  private async recordTaskExecution(task: any, taskResult: any, currentStep: any): Promise<void> {
+  private async recordTaskExecution(task: Task, taskResult: any, currentStep: Step): Promise<void> {
     // Create evidence if data exists
     const evidence = taskResult.data ? 
       Evidence.create(
@@ -610,9 +597,8 @@ export class WorkflowManager {
     // Check for early exit
     if (this.config.allowEarlyExit) {
       const completion = this.calculateCompletionPercentage();
-      const criticalStepsComplete = this.checkCriticalSteps();
       
-      if (completion >= (this.config.minAcceptableCompletion || 60) && criticalStepsComplete) {
+      if (completion >= (this.config.minAcceptableCompletion || 60)) {
         this.reporter.log(`✅ Achieved ${completion.toFixed(1)}% completion with critical steps done. Exiting with partial success.`);
         return true; // Will trigger early exit
       }
@@ -625,13 +611,13 @@ export class WorkflowManager {
    * Process step completion and determine if workflow should continue
    */
   private async processStepCompletion(
-    currentStep: any,
+    step: Step,
     stepTaskResults: any[],
     stepSuccess: boolean
   ): Promise<boolean> {
     // Complete step with actual results
     const completeStepResult = this.workflowAggregate!.completeStep(
-      currentStep.getId(),
+      step.getId(),
       stepTaskResults
     );
     
@@ -639,7 +625,7 @@ export class WorkflowManager {
       this.reporter.log(`Failed to complete step: ${completeStepResult.getError()}`);
     }
     
-    this.reporter.log(`✅ Step completed: ${currentStep.getDescription()} (Success: ${stepSuccess})`);
+    this.reporter.log(`✅ Step completed: ${step.getDescription()} (Success: ${stepSuccess})`);
     
     // Check if workflow is complete
     const status = this.workflowAggregate!.getExecutionStatus();
@@ -650,16 +636,17 @@ export class WorkflowManager {
     
     // Handle step success
     if (stepSuccess) {
-      const advanceResult = this.workflowAggregate!.advanceToNextStep();
-      if (advanceResult.isFailure()) {
-        this.reporter.log(`Cannot advance: ${advanceResult.getError()}`);
-        return false; // Stop execution
-      }
+      // TODO: Setup this.
+      // const advanceResult = this.workflowAggregate!.advanceToNextStep();
+      // if (advanceResult.isFailure()) {
+      //   this.reporter.log(`Cannot advance: ${advanceResult.getError()}`);
+      //   return false; // Stop execution
+      // }
       return true; // Continue to next step
     }
     
     // Handle step failure
-    return await this.handleStepFailure(currentStep);
+    return await this.handleStepFailure(step);
   }
 
   /**
@@ -925,7 +912,6 @@ export class WorkflowManager {
         workflowStatus = 'degraded';
       }
     } else {
-      // Fallback to legacy calculation
       const totalSteps = this.currentStrategy?.steps.length || 0;
       const completedCount = Array.from(this.completedSteps.values())
         .filter(r => r.success || r.status === 'partial').length;
@@ -946,7 +932,7 @@ export class WorkflowManager {
     const allExtractedData = this.stateManager.getAllExtractedData();
     
     // Base result object with aggregate data
-    const baseResult = {
+    const baseResult: WorkflowResult = {
       id: workflowId,
       goal: workflowGoal,
       status: workflowStatus,
@@ -958,32 +944,15 @@ export class WorkflowManager {
         expectedOutcome: 'completed'
       })),
       failedTasks: Array.from(this.completedSteps.values()).filter(r => !r.success).map(r => r.stepId),
-      totalDuration: duration,
-      duration,
-      startTime: this.startTime || new Date(),
-      endTime: endTime,
+
       extractedData: allExtractedData,
       summary: `Workflow completed with ${completionPercentage.toFixed(1)}% progress`,
-      errors: this.errors,
-      executionStatistics: executionStats,
-      aggregateMetrics: this.workflowAggregate ? {
-        workflowStatus: this.workflowAggregate.getExecutionStatus().workflowStatus,
-        sessionStatus: this.workflowAggregate.getExecutionStatus().sessionStatus,
-        isHealthy: this.workflowAggregate.getExecutionStatus().isHealthy,
-        totalSteps: this.workflowAggregate.getExecutionStatus().totalSteps,
-        currentStepIndex: this.workflowAggregate.getExecutionStatus().currentStepIndex
-      } : undefined,
-      // Progressive completion fields
-      completionPercentage: Number(completionPercentage.toFixed(1)),
-      partialResults: this.extractedData,
-      degradedSteps: Array.from(this.completedSteps.entries())
-        .filter(([_, r]) => r.degraded)
-        .map(([id, _]) => id),
-      bestEffortData: allExtractedData,
-      confidenceScore: this.calculateOverallConfidence()
+
+      startTime: this.startTime || new Date(),
+      endTime: endTime,
+      duration,
     };
     
-    // If summarizer is available, enhance the result
     if (this.summarizer) {
       try {
         const summarizerInput: SummarizerInput = {
@@ -1002,9 +971,7 @@ export class WorkflowManager {
         
         return {
           ...baseResult,
-          structuredSummary,
-          summary: structuredSummary.summary,
-          cleanData: structuredSummary.extractedFields
+          summary: structuredSummary.summary
         };
       } catch (error) {
         this.reporter.log(`⚠️ Summarizer failed, using basic result: ${error}`);
@@ -1015,32 +982,11 @@ export class WorkflowManager {
     return baseResult;
   }
 
-  private calculateOverallConfidence(): number {
-    const results = Array.from(this.completedSteps.values());
-    if (results.length === 0) return 0;
-    
-    const avgConfidence = results
-      .map(r => (r as any).confidence || 0.5)
-      .reduce((a, b) => a + b, 0) / results.length;
-      
-    return Number(avgConfidence.toFixed(2));
-  }
-
   private calculateCompletionPercentage(): number {
     const totalSteps = this.currentStrategy?.steps.length || 0;
     const completedCount = Array.from(this.completedSteps.values())
       .filter(r => r.success || r.status === 'partial').length;
     return totalSteps > 0 ? (completedCount / totalSteps) * 100 : 0;
-  }
-
-  private checkCriticalSteps(): boolean {
-    const criticalSteps = this.config.criticalSteps || [];
-    if (criticalSteps.length === 0) return true; // No critical steps defined
-    
-    return criticalSteps.every(stepId => {
-      const stepResult = this.completedSteps.get(stepId);
-      return stepResult && (stepResult.success || stepResult.status === 'partial');
-    });
   }
 
   private emitWorkflowEvent(event: keyof import('../interfaces/event-bus.interface').AppEvents, data: any): void {
@@ -1107,28 +1053,6 @@ export class WorkflowManager {
     }
   }
 
-  private async buildExecutionContext(_task: any): Promise<any> {
-    const currentState = await this.captureSemanticState();
-    const currentUrlObj = Url.create(this.browser.getPageUrl()).getValue();
-    const viewport = Viewport.create(1920, 1080).getValue();
-    
-    const domainPageState = PageStateVO.create({
-      url: currentUrlObj,
-      title: currentState.title || 'Current Page', 
-      html: '',
-      elements: [],
-      loadTime: 0
-    });
-    
-    return {
-      currentUrl: currentUrlObj,
-      viewport: viewport,
-      pageState: domainPageState,
-      availableActions: currentState.availableActions,
-      previousActions: []
-    };
-  }
-
   private buildEvaluationContext(): any {
     const currentUrlObj = Url.create(this.browser.getPageUrl()).getValue();
     
@@ -1172,104 +1096,6 @@ export class WorkflowManager {
   }
 
   /**
-   * Get current workflow metrics from the metrics handler
-   */
-  getWorkflowMetrics() {
-    return this.metricsHandler.getMetrics();
-  }
-
-  /**
-   * Get detailed workflow statistics
-   */
-  getWorkflowStatistics() {
-    return this.metricsHandler.getDetailedStats();
-  }
-
-  /**
-   * Export metrics data as JSON
-   */
-  exportMetrics(): string {
-    return this.metricsHandler.exportMetrics();
-  }
-
-  /**
-   * Get task failure statistics
-   */
-  getTaskFailureStatistics() {
-    return this.taskFailureHandler.getRetryStatistics();
-  }
-
-  /**
-   * Get workflow health statistics
-   */
-  getWorkflowHealthStatistics() {
-    return this.workflowStuckHandler.getHealthStatistics();
-  }
-
-  /**
-   * Get event store statistics
-   */
-  async getEventStoreStatistics() {
-    return await this.eventStore.getStats();
-  }
-
-  /**
-   * Get events for a specific aggregate (useful for debugging)
-   */
-  async getEventsForAggregate(aggregateId: string) {
-    return await this.eventStore.getEventsForAggregate(aggregateId);
-  }
-
-  /**
-   * Get recent events (useful for monitoring)
-   */
-  async getRecentEvents(limit: number = 50) {
-    return await this.eventStore.getLatestEvents(limit);
-  }
-
-  /**
-   * Export all events as JSON
-   */
-  exportEvents(): string {
-    return (this.eventStore as InMemoryEventStore).exportToJson();
-  }
-
-  /**
-   * Get event timeline for debugging
-   */
-  async getEventTimeline(aggregateId?: string) {
-    return await (this.eventStore as InMemoryEventStore).getEventTimeline(aggregateId);
-  }
-
-  /**
-   * Get saga statistics
-   */
-  getSagaStatistics() {
-    return this.workflowSaga.getSagaStatistics();
-  }
-
-  /**
-   * Get active sagas
-   */
-  getActiveSagas() {
-    return this.workflowSaga.getActiveSagas();
-  }
-
-  /**
-   * Get saga for current workflow
-   */
-  getCurrentWorkflowSaga() {
-    if (this.workflow) {
-      return this.workflowSaga.getSagaForWorkflow(this.workflow.getId().toString());
-    }
-    return undefined;
-  }
-
-  /**
-   * TaskQueue event listeners removed - using direct WorkflowAggregate execution
-   */
-  
-  /**
    * Setup StateManager event listeners for monitoring integration
    */
   private setupStateManagerEventListeners(): void {
@@ -1289,6 +1115,46 @@ export class WorkflowManager {
     });
   }
   
+  /**
+   * Process extracted data from evidence objects and store in StateManager
+   */
+  private async processExtractedDataFromEvidence(evidence: Evidence[]): Promise<void> {
+    if (!evidence || evidence.length === 0) {
+      return;
+    }
+
+    try {
+      for (const evidenceItem of evidence) {
+        const evidenceData = evidenceItem.getData();
+        
+        // Check if this is extracted data evidence
+        if (evidenceItem.getType() === 'extracted-data' && evidenceData) {
+          let extractedData: Record<string, any> = {};
+          
+          // Parse the evidence data if it's a JSON string
+          if (typeof evidenceData === 'string') {
+            try {
+              extractedData = JSON.parse(evidenceData);
+            } catch (parseError) {
+              console.warn('Failed to parse extracted data evidence:', parseError);
+              continue;
+            }
+          } else if (typeof evidenceData === 'object') {
+            extractedData = evidenceData;
+          }
+          
+          // Store extracted data in StateManager
+          if (Object.keys(extractedData).length > 0) {
+            this.stateManager.mergeExtractedData(extractedData);
+            this.reporter.log(`📊 Processed extracted data from evidence: ${Object.keys(extractedData).join(', ')}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to process extracted data from evidence:', error);
+    }
+  }
+
   /**
    * Connect domain events to WorkflowMonitor through EventBus bridge
    */

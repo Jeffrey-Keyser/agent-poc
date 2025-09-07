@@ -1,3 +1,5 @@
+import { Variable } from '../value-objects';
+
 // Strategic level - what the Planner creates
 export interface StrategicTask {
   id: string;
@@ -126,44 +128,35 @@ export interface TaskEvent {
   data?: any;
 }
 
-// Result types
 export interface WorkflowResult {
   id: string;
   goal: string;
   status: 'success' | 'failure' | 'partial' | 'degraded';
   completedTasks: string[];
-  completedSteps: StrategicTask[]; // Added for compatibility with workflow-manager
+  completedSteps: StrategicTask[];
   failedTasks: string[];
-  totalDuration: number;
-  duration: number; // Added for compatibility with workflow-monitor
+
+  extractedData?: any;
+  summary: string;
+
   startTime: Date;
   endTime: Date;
-  extractedData?: any;
-  finalState?: PageState;
-  summary: string;
-  errors?: string[]; // Added for compatibility with migration-service
-  structuredSummary?: any;  // SummarizerOutput from agent.interface
-  cleanData?: any;           // Cleaned extracted fields
-  completionPercentage: number;
-  partialResults?: any;
-  degradedSteps?: string[];
-  bestEffortData?: any;
-  confidenceScore: number;
+  duration: number;
 }
 
 // Multi-agent system configuration
 export interface MultiAgentConfig {
-  headless?: boolean;
-  variables?: any[]; // Variable type from existing system
-  models?: {
-    planner?: string;
-    executor?: string;
-    evaluator?: string;
-    errorHandler?: string;
-    summarizer?: string;
+  headless: boolean;
+  variables: Variable[]; 
+  models: {
+    planner: string;
+    executor: string;
+    evaluator: string;
+    errorHandler: string;
+    summarizer: string;
   };
-  maxRetries?: number;
-  timeout?: number;
+  maxRetries: number;
+  timeout: number;
 }
 
 // Error handling types

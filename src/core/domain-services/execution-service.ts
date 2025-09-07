@@ -63,7 +63,6 @@ export interface ExecutionService {
    */
   executeTask(
     task: Task,
-    context: TaskExecutionContext,
     config?: Partial<StepExecutionConfig>,
     queue?: TaskQueue
   ): Promise<Result<EnhancedTaskResult>>;

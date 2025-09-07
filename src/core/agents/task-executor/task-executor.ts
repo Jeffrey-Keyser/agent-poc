@@ -48,9 +48,7 @@ export class TaskExecutorAgent implements ITaskExecutor {
       throw new Error('Invalid executor input provided');
     }
 
-    const strategicTask = input.task;
     try {
-      // MODIFIED: Get full DOM state with screenshots
       const {
         stringifiedDomState,
         screenshot,
@@ -61,7 +59,7 @@ export class TaskExecutorAgent implements ITaskExecutor {
 
       // TODO: This should probably be split out
       const microActions = await this.decomposeStrategicStep(
-        strategicTask, 
+        input.expectedOutcome, 
         stringifiedDomState,
         { screenshot, pristineScreenshot, pixelAbove, pixelBelow },
         input.memoryLearnings,
@@ -93,7 +91,6 @@ export class TaskExecutorAgent implements ITaskExecutor {
           // Refresh page state after significant actions
           if (this.shouldRefreshState(action)) {
             await this.wait(500); // Brief wait for page updates
-            // DOM state could be refreshed here for subsequent actions if needed
           }
 
         } catch (error) {
@@ -104,15 +101,14 @@ export class TaskExecutorAgent implements ITaskExecutor {
             timestamp: new Date(),
             duration: 0
           });
-          break; // Stop execution on error
+          break;
         }
       }
 
-      // Capture final state with extracted data
       const finalState = await this.captureCurrentState(extractedData);
 
       const output: ExecutorOutput = {
-        taskId: strategicTask.id,
+        taskId: "",
         microActions,
         results,
         finalState,
@@ -133,10 +129,7 @@ export class TaskExecutorAgent implements ITaskExecutor {
   validateInput(input: ExecutorInput): boolean {
     return !!(
       input &&
-      input.task &&
-      typeof input.task.id === 'string' &&
-      input.pageState &&
-      typeof input.pageState.url === 'string'
+      typeof input.expectedOutcome === 'string'
     );
   }
 
@@ -155,7 +148,7 @@ export class TaskExecutorAgent implements ITaskExecutor {
    * Decompose strategic step into micro-actions using LLM
    */
   private async decomposeStrategicStep(
-    strategicTask: any, 
+    expectedOutcome: string, 
     stringifiedDomState: string,
     visualContext?: {
       screenshot?: string;
@@ -172,9 +165,7 @@ ${memoryLearnings ? `${memoryLearnings}\n` : ''}
 
 STRATEGIC TASK TO EXECUTE:
 
-Intent: ${strategicTask.intent}
-Target Concept: ${strategicTask.targetConcept}
-Expected Outcome: ${strategicTask.expectedOutcome}
+Expected Outcome: ${expectedOutcome}
 
 ${visualContext?.pixelAbove ? `... ${visualContext.pixelAbove} PIXELS ABOVE - SCROLL UP TO SEE MORE` : ''}
 
@@ -470,8 +461,8 @@ Use the element indices from the DOM state above.
     return {
       url: this.browser.getPageUrl(),
       title: await this.browser.getPage().title(),
-      visibleSections: [], // Would implement semantic section detection
-      availableActions: [], // Would implement action detection
+      visibleSections: [],
+      availableActions: [],
       extractedData: extractedData || {}
     };
   }

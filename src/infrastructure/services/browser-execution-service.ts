@@ -1,6 +1,5 @@
 import {
   ExecutionService,
-  TaskExecutionContext,
   ExecutionAction,
   EnhancedTaskResult,
   StepExecutionConfig,
@@ -11,7 +10,7 @@ import { TaskId, ActionType, Evidence, Duration } from '../../core/value-objects
 import { Browser } from '../../core/interfaces/browser.interface';
 import { LLM } from '../../core/interfaces/llm.interface';
 import { TaskExecutorAgent } from '../../core/agents/task-executor/task-executor';
-import { ExecutorConfig, MicroAction } from '../../core/types/agent-types';
+import { ExecutorConfig, ExecutorInput, MicroAction } from '../../core/types/agent-types';
 import { DomService } from '../../infra/services/dom-service';
 
 /**
@@ -32,7 +31,6 @@ export class BrowserExecutionService implements ExecutionService {
 
   async executeTask(
     task: Task,
-    context: TaskExecutionContext,
     config: Partial<StepExecutionConfig> = {}
   ): Promise<Result<EnhancedTaskResult>> {
     const startTime = new Date();
@@ -55,7 +53,7 @@ export class BrowserExecutionService implements ExecutionService {
           }
           
           // Convert task to format expected by TaskExecutorAgent
-          const executorInput = this.convertTaskToExecutorInput(task, context);
+          const executorInput = this.convertTaskToExecutorInput(task);
           
           // Execute using existing TaskExecutorAgent
           const executorOutput = await this.taskExecutorAgent.execute(executorInput);
@@ -147,28 +145,10 @@ export class BrowserExecutionService implements ExecutionService {
     }
   }
 
-  // Private helper methods
-  private convertTaskToExecutorInput(task: Task, context: TaskExecutionContext): any {
+  private convertTaskToExecutorInput(task: Task): ExecutorInput {
     return {
-      strategicTask: {
-        id: task.getId().toString(),
-        description: task.getDescription(),
-        intent: task.getIntent()?.toString() || 'navigate',
-        targetConcept: this.extractTargetConcept(task.getDescription()),
-        confidence: task.getConfidence?.()?.getValue() || 80
-      },
-      currentState: {
-        url: context.currentUrl.toString(),
-        pageContent: context.pageState?.html || '',
-        screenshot: undefined,
-        domElements: context.pageState?.elements || []
-      },
-      variables: [], // Would be populated from context if available
-      previousActions: context.previousActions?.map(action => ({
-        type: action.action.toString(),
-        result: action.success ? 'success' : 'failure'
-      })) || []
-    };
+      expectedOutcome: task.getDescription()
+    }
   }
 
   private convertMicroActionsToExecutionActions(
@@ -243,6 +223,24 @@ export class BrowserExecutionService implements ExecutionService {
 
         if (screenshotEvidence.isSuccess()) {
           evidence.push(screenshotEvidence.getValue());
+        }
+      }
+
+      // Capture extracted data from finalState
+      if (executorOutput.finalState?.extractedData && Object.keys(executorOutput.finalState.extractedData).length > 0) {
+        const extractedDataEvidence = Evidence.create(
+          'extracted-data',
+          JSON.stringify(executorOutput.finalState.extractedData),
+          {
+            source: 'browser-execution-service',
+            description: `Extracted data from task execution: ${Object.keys(executorOutput.finalState.extractedData).join(', ')}`,
+            confidence: 95
+          }
+        );
+
+        if (extractedDataEvidence.isSuccess()) {
+          evidence.push(extractedDataEvidence.getValue());
+          console.log(`📊 Created evidence for extracted data: ${Object.keys(executorOutput.finalState.extractedData).join(', ')}`);
         }
       }
     } catch (error) {
@@ -322,16 +320,6 @@ export class BrowserExecutionService implements ExecutionService {
       default:
         return 'Review task configuration and try alternative approach';
     }
-  }
-
-  private extractTargetConcept(description: string): string {
-    // Simple heuristic to extract target concept from description
-    const words = description.toLowerCase().split(' ');
-    const concepts = words.filter(word => 
-      word.length > 3 && 
-      !['the', 'and', 'with', 'from', 'that', 'this', 'will'].includes(word)
-    );
-    return concepts[0] || 'element';
   }
 
   private convertToActionType(type: string): ActionType {

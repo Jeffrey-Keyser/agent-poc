@@ -2,7 +2,6 @@ import { AgentInfrastructure } from './core/factories/agent-factory';
 import { WorkflowFactory } from './core/factories/workflow-factory';
 import { WorkflowManager } from './core/services/workflow-manager';
 import { MultiAgentConfig } from './core/types/agent-types';
-import { Variable } from './core/value-objects/variable';
 import { ChromiumBrowser } from './infra/services/chromium-browser';
 import { InMemoryFileSystem } from './infra/services/in-memory-file-system';
 import { PlaywrightScreenshoter } from './infra/services/playwright-screenshotter';
@@ -23,15 +22,8 @@ export interface InitMultiAgentConfig extends MultiAgentConfig {
   
   /**
    * Whether to run the browser in headless mode
-   * @default false
    */
-  headless?: boolean;
-  
-  /**
-   * Variables for sensitive information and dynamic values
-   * @default []
-   */
-  variables?: Variable[];
+  headless: boolean;
   
   /**
    * Optional start URL for browser initialization
@@ -41,14 +33,13 @@ export interface InitMultiAgentConfig extends MultiAgentConfig {
   
   /**
    * Enable verbose logging for debugging
-   * @default false
    */
-  verbose?: boolean;
+  verbose: boolean;
   
   /**
    * Browser viewport configuration
    */
-  viewport?: {
+  viewport: {
     width: number;
     height: number;
   };
@@ -74,16 +65,15 @@ export function initMultiAgent(config: InitMultiAgentConfig): WorkflowManager {
   const infrastructure = initializeInfrastructure(config);
   const workflowManager = WorkflowFactory.create({
     llm: config.llm,
-    ...(config.models && { models: config.models }),
-    browser: {
-      headless: config.headless ?? false,
-      ...(config.viewport && { viewport: config.viewport })
-    },
-    ...(config.maxRetries !== undefined && { maxRetries: config.maxRetries }),
-    ...(config.timeout !== undefined && { timeout: config.timeout }),
-    enableReplanning: true,
-    ...(config.verbose !== undefined && { verbose: config.verbose }),
-    ...(config.reporterName && { reporterName: config.reporterName })
+    models: config.models,
+    headless: config.headless,
+    variables: config.variables,
+    startUrl: config.startUrl || 'https://google.com',
+    maxRetries: config.maxRetries,
+    timeout: config.timeout,
+    verbose: config.verbose,
+    reporterName: config.reporterName || 'MultiAgent',
+    viewport: config.viewport
   }, infrastructure);
   
   if (config.verbose) {
@@ -119,7 +109,6 @@ function initializeInfrastructure(config: InitMultiAgentConfig): AgentInfrastruc
   const reporter = new ConsoleReporter(config.reporterName || 'MultiAgent');
   
   return {
-    llm: config.llm,
     browser,
     domService,
     eventBus,

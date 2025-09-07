@@ -34,12 +34,7 @@ export interface PlannerOutput {
 }
 
 export interface ExecutorInput {
-  task: StrategicTask;
-  pageState: PageState;
-  screenshots?: {
-    pristine: string;
-    highlighted: string;
-  };
+  expectedOutcome: string;
   memoryLearnings?: string;
 }
 
@@ -96,6 +91,9 @@ export interface ITaskExecutor extends IAgent<ExecutorInput, ExecutorOutput> {
 export interface ITaskEvaluator extends IAgent<EvaluatorInput, EvaluatorOutput> {
 }
 
+export interface ITaskSummarizer extends IAgent<SummarizerInput, SummarizerOutput> {
+}
+
 export interface IErrorHandler {
   analyze(context: any): Promise<any>; // ErrorContext and RetryStrategy types from agent-types.ts
 }
@@ -118,30 +116,18 @@ export interface SummarizerOutput {
   status: 'completed' | 'partial' | 'failed';
   summary: string;                        // Executive summary (2-3 sentences)
   
-  // Extracted fields organized by category
   extractedFields: {
     label: string;                        // Human-readable label
     value: any;                           // The actual value
-    source?: string;                      // Which step provided this
   }[];
   
-  // Performance metrics
   performanceMetrics: {
     totalSteps: number;
     successfulSteps: number;
     failedSteps: number;
-    duration: string;                     // Human-readable (e.g., "2m 35s")
+    duration: string;
   };
   
-  // Optional recommendations for future runs
-  recommendations?: string[];
-  
-  // Metadata
   timestamp: Date;
-  rawDataAvailable: boolean;             // Indicates if raw data is preserved
-}
-
-// Agent interface
-export interface ITaskSummarizer extends IAgent<SummarizerInput, SummarizerOutput> {
-  // No additional methods needed beyond base interface
+  rawDataAvailable: boolean;
 }

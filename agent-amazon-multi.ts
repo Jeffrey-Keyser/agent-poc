@@ -48,20 +48,20 @@ async function main() {
   try {
     console.log('🚀 Starting Amazon multi-agent workflow...');
     
-    const searchResult = await workflow.execute(
+    const result = await workflow.execute(
       'Search Amazon for dark roast caffeinated coffee beans and return the URL of the first coffee package that has a rating of 4.5 or higher, is ~$25.00, in stock and is a dark roast. Don\'t utilize filters on the list page.',
       'https://amazon.com'    
     );
     
-    console.log('📊 Search Results:', searchResult);
+    console.log('📊 Search Results:', result);
     
-    if (searchResult.status === 'success') {
+    if (result.status === 'success') {
       console.log('✅ Workflow completed successfully!');
       // Truncate full page content for display to keep output manageable
-      const displayData = truncateExtractedData(searchResult.extractedData, 500);
+      const displayData = truncateExtractedData(result.extractedData, 500);
       console.log('📈 Extracted data:', displayData);
     } else {
-      console.log('⚠️ Workflow completed with issues:', searchResult.status);
+      console.log('⚠️ Workflow completed with issues:', result.status);
     }
     
   } catch (error) {

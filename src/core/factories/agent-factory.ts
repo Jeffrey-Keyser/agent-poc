@@ -63,7 +63,6 @@ export class AgentFactory {
  * Infrastructure components required for agent creation
  */
 export interface AgentInfrastructure {
-  llm: LLM;
   browser: Browser;
   domService: DomService;
   eventBus: EnhancedEventBusInterface;

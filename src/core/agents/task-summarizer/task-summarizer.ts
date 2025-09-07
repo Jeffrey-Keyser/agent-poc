@@ -33,8 +33,6 @@ export class TaskSummarizerAgent implements ITaskSummarizer {
   private llm: LLM;
   private config: SummarizerConfig;
   
-  // No extraction patterns needed - fields are simply mapped as strings
-
   constructor(llm: LLM, config: SummarizerConfig) {
     this.llm = llm;
     this.model = config.model;
@@ -44,8 +42,6 @@ export class TaskSummarizerAgent implements ITaskSummarizer {
       maxSummaryLength: 500,
       ...config
     };
-    
-    // Configuration initialized
   }
 
   /**
@@ -56,8 +52,6 @@ export class TaskSummarizerAgent implements ITaskSummarizer {
       throw new Error('Invalid summarizer input provided');
     }
 
-    // Pass the raw data directly to the LLM for processing
-    
     const systemMessage = new SystemMessage({ content: TASK_SUMMARIZER_PROMPT });
     const userPrompt = this.buildUserPrompt(input, input.extractedData);
     const messages = [systemMessage, new HumanMessage({ content: userPrompt })];
@@ -65,18 +59,13 @@ export class TaskSummarizerAgent implements ITaskSummarizer {
     const parser = new JsonOutputParser<any>();
     const response = await this.llm.invokeAndParse(messages, parser);
     
-    // Post-process the response
     const output = this.buildOutput(input, response);
-    
     if (!this.validateOutput(output)) {
       throw new Error('Generated invalid summarizer output');
     }
 
     return output;
   }
-
-  // Removed preCleanData - LLM handles cleaning directly
-
 
   /**
    * Build the prompt for the LLM
@@ -150,9 +139,6 @@ Focus on extracting clean, actionable data from the results.
         failedSteps,
         duration: this.formatDuration(input.totalDuration)
       },
-      recommendations: this.config.includeRecommendations ? 
-        (llmResponse.recommendations || this.generateRecommendations(input)) : 
-        undefined,
       timestamp: new Date(),
       rawDataAvailable: true
     };
@@ -164,33 +150,6 @@ Focus on extracting clean, actionable data from the results.
   private generateDefaultSummary(input: SummarizerInput, status: string): string {
     const successCount = input.completedSteps.filter(s => s.success).length;
     return `Workflow ${status} with ${successCount}/${input.plan.length} steps completed in ${this.formatDuration(input.totalDuration)}. Goal: ${input.goal}`;
-  }
-
-  /**
-   * Generate recommendations based on performance
-   */
-  private generateRecommendations(input: SummarizerInput): string[] {
-    const recommendations: string[] = [];
-    
-    // Check for slow steps
-    const avgTime = input.totalDuration / input.plan.length;
-    const slowSteps = input.completedSteps.filter(s => s.duration > avgTime * 2);
-    if (slowSteps.length > 0) {
-      recommendations.push(`Optimize slow steps: ${slowSteps.map(s => s.stepId).join(', ')}`);
-    }
-    
-    // Check for failures
-    const failedSteps = input.completedSteps.filter(s => s.status !== 'success');
-    if (failedSteps.length > 0) {
-      recommendations.push(`Investigate failures in steps: ${failedSteps.map(s => s.stepId).join(', ')}`);
-    }
-    
-    // Check for extraction issues
-    if (input.extractedData && Object.keys(input.extractedData).length === 0) {
-      recommendations.push('No data was extracted - verify selectors and page structure');
-    }
-    
-    return recommendations;
   }
 
   /**
@@ -218,7 +177,6 @@ Focus on extracting clean, actionable data from the results.
       Array.isArray(input.completedSteps) &&
       input.startTime &&
       input.endTime &&
-      // Validate StepResult structure
       input.completedSteps.every(step => 
         step.stepId && 
         step.status && 

@@ -568,7 +568,6 @@ export class AIEvaluationService implements EvaluationService {
     evidence: Evidence[],
     context: EvaluationContext
   ): Promise<Result<ExtractedData>> {
-    // Simplified data extraction
     const textContent = this.extractTextFromEvidence(evidence);
     
     const extractedData: ExtractedData = {

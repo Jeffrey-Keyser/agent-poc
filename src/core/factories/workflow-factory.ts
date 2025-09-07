@@ -22,36 +22,7 @@ import {
   InMemoryMemoryRepository
 } from '../../infrastructure/repositories';
 import { ExecutionService } from '../domain-services/execution-service';
-
-/**
- * Simplified configuration interface for WorkflowFactory
- */
-export interface WorkflowConfig {
-  llm: LLM;
-  models?: {
-    planner?: string;
-    executor?: string;
-    evaluator?: string;
-    summarizer?: string;
-  };
-  browser?: BrowserConfig;
-  maxRetries?: number;
-  timeout?: number;
-  enableReplanning?: boolean;
-  verbose?: boolean;
-  reporterName?: string;
-}
-
-/**
- * Browser configuration interface
- */
-export interface BrowserConfig {
-  headless?: boolean;
-  viewport?: {
-    width: number;
-    height: number;
-  };
-}
+import { InitMultiAgentConfig } from '@/init-multi-agent';
 
 /**
  * Infrastructure components bundle
@@ -95,7 +66,7 @@ export class WorkflowFactory {
    * @returns Configured WorkflowManager instance
    */
   static create(
-    config: WorkflowConfig, 
+    config: InitMultiAgentConfig, 
     infrastructure: Infrastructure
   ): WorkflowManager {
     const services = this.createDomainServices(infrastructure, config);
@@ -112,11 +83,10 @@ export class WorkflowFactory {
       infrastructure.browser,
       infrastructure.domService,
       infrastructure.reporter,
+      this.createSummarizer(config.llm, config),
       {
         maxRetries: config.maxRetries || 3,
-        timeout: config.timeout || 300000,
-        enableReplanning: config.enableReplanning ?? true,
-        summarizer: this.createSummarizer(config.llm, config)
+        timeout: config.timeout || 300000
       }
     );
   }
@@ -126,7 +96,7 @@ export class WorkflowFactory {
    */
   private static createDomainServices(
     infrastructure: Infrastructure, 
-    config: WorkflowConfig
+    config: InitMultiAgentConfig
   ): Services {
     const executionService = new BrowserExecutionService(
       config.llm,
@@ -160,7 +130,7 @@ export class WorkflowFactory {
    * Create repository implementations
    * Uses in-memory implementations by default, can be extended for persistent storage
    */
-  private static createRepositories(_config: WorkflowConfig): Repositories {
+  private static createRepositories(_config: InitMultiAgentConfig): Repositories {
     return {
       workflowRepository: new InMemoryWorkflowRepository(),
       planRepository: new InMemoryPlanRepository(),
@@ -171,7 +141,7 @@ export class WorkflowFactory {
   /**
    * Create task summarizer with configuration
    */
-  private static createSummarizer(llm: LLM, config: WorkflowConfig): ITaskSummarizer {
+  private static createSummarizer(llm: LLM, config: InitMultiAgentConfig): ITaskSummarizer {
     return new TaskSummarizerAgent(llm, {
       llm,
       model: config.models?.summarizer || 'gpt-5-nano',

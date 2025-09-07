@@ -94,18 +94,15 @@ Authentication Workflow:
   "extractedFields": [
     {
       "label": "Username",
-      "value": "john-doe-developer",
-      "source": "step-1"
+      "value": "john-doe-developer"
     },
     {
       "label": "Profile URL",
-      "value": "https://github.com/john-doe-developer",
-      "source": "step-8"
+      "value": "https://github.com/john-doe-developer"
     },
     {
       "label": "Bio Updated",
-      "value": "Software developer passionate about automation",
-      "source": "step-6"
+      "value": "Software developer passionate about automation"
     }
   ],
   "performanceMetrics": {
@@ -122,18 +119,15 @@ E-commerce Workflow:
   "extractedFields": [
     {
       "label": "Product Name",
-      "value": "Organic Dark Roast Coffee Beans",
-      "source": "step-3"
+      "value": "Organic Dark Roast Coffee Beans"
     },
     {
       "label": "Price",
-      "value": "$24.99",
-      "source": "step-3"
+      "value": "$24.99"
     },
     {
       "label": "Rating",
-      "value": "4.7 stars (1,234 reviews)",
-      "source": "step-3"
+      "value": "4.7 stars (1,234 reviews)"
     }
   ],
   "performanceMetrics": {

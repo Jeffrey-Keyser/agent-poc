@@ -14,50 +14,31 @@ import { PageState as PageStateType } from '../types/agent-types';
 import { DomainEvent } from '../domain-events';
 import { StateManager } from '../services/state-manager';
 
-// Execution statistics for analysis
 export interface ExecutionStatistics {
   totalExecutions: number;
   successfulExecutions: number;
   failedExecutions: number;
-  successRate: number;
-  averageDuration: number;
-  fastExecutions: number;
-  slowExecutions: number;
   retryExecutions: number;
   evidenceCount: number;
 }
 
-// Execution Aggregate - manages execution context and tracks execution results
 export class ExecutionAggregate {
   private readonly domainEvents: DomainEvent[] = [];
-  private stateManager?: StateManager;
 
   constructor(
     private readonly context: ExecutionContext,
-    private readonly results: ExecutionResult[] = []
+    private readonly results: ExecutionResult[] = [],
+    private readonly stateManager: StateManager
   ) {
     this.validateAggregateConsistency();
   }
 
-  // Static factory method
-  static create(context: ExecutionContext): Result<ExecutionAggregate> {
+  static create(context: ExecutionContext, stateManager: StateManager): Result<ExecutionAggregate> {
     if (!context.isReady()) {
       return Result.fail('Execution context is not ready');
     }
 
-    return Result.ok(new ExecutionAggregate(context, []));
-  }
-
-  // Static method to recreate from existing data
-  static fromExistingData(
-    context: ExecutionContext,
-    results: ExecutionResult[]
-  ): Result<ExecutionAggregate> {
-    // Validate that all results belong to this context's workflow
-    // In a real implementation, we'd validate workflow IDs match
-    // For now, we assume they're consistent if context is valid
-    
-    return Result.ok(new ExecutionAggregate(context, [...results]));
+    return Result.ok(new ExecutionAggregate(context, [], stateManager));
   }
 
   // Getters
@@ -71,11 +52,6 @@ export class ExecutionAggregate {
 
   getResultCount(): number {
     return this.results.length;
-  }
-
-  // StateManager integration
-  setStateManager(stateManager: StateManager): void {
-    this.stateManager = stateManager;
   }
 
   // Core aggregate operations - Enhanced with StateManager integration
@@ -157,10 +133,11 @@ export class ExecutionAggregate {
 
   startTaskExecution(task: Task): Result<void> {
     // Start task execution in context
-    const startResult = this.context.startTaskExecution(task.getId());
-    if (startResult.isFailure()) {
-      return Result.fail(startResult.getError());
-    }
+    // TODO: Implement
+    // const startResult = this.context.startTaskExecution(task.getId());
+    // if (startResult.isFailure()) {
+    //   return Result.fail(startResult.getError());
+    // }
 
     // Mark task as executing
     task.execute();
@@ -226,25 +203,15 @@ export class ExecutionAggregate {
     return this.results.filter(result => result.isFastExecution(thresholdMs));
   }
 
-  // Analysis operations
   getExecutionStatistics(): ExecutionStatistics {
     const totalExecutions = this.results.length;
     const successfulExecutions = this.getSuccessfulExecutions().length;
     const failedExecutions = this.getFailedExecutions().length;
-    const successRate = totalExecutions > 0 ? successfulExecutions / totalExecutions : 0;
-    
-    const averageDuration = totalExecutions > 0 
-      ? this.results.reduce((sum, result) => sum + result.getDuration().getMilliseconds(), 0) / totalExecutions
-      : 0;
 
     return {
       totalExecutions,
       successfulExecutions,
       failedExecutions,
-      successRate,
-      averageDuration,
-      fastExecutions: this.getFastExecutions().length,
-      slowExecutions: this.getSlowExecutions().length,
       retryExecutions: this.getRetryExecutions().length,
       evidenceCount: this.getExecutionsWithEvidence().length
     };
@@ -264,100 +231,6 @@ export class ExecutionAggregate {
     return this.results.reduce((worst, current) => 
       !current.isBetterThan(worst) ? current : worst
     );
-  }
-
-  getTaskExecutionSummary(taskId: TaskId): {
-    taskId: string;
-    executionCount: number;
-    successCount: number;
-    failureCount: number;
-    averageDuration: number;
-    bestExecution?: ExecutionResult;
-    worstExecution?: ExecutionResult;
-  } | undefined {
-    const taskExecutions = this.getExecutionsByTaskId(taskId);
-    if (taskExecutions.length === 0) return undefined;
-
-    const successCount = taskExecutions.filter(exec => exec.isSuccess()).length;
-    const failureCount = taskExecutions.filter(exec => exec.isFailure()).length;
-    const averageDuration = taskExecutions.reduce(
-      (sum, exec) => sum + exec.getDuration().getMilliseconds(), 
-      0
-    ) / taskExecutions.length;
-
-    const bestExecution = taskExecutions.reduce((best, current) => 
-      current.isBetterThan(best) ? current : best
-    );
-
-    const worstExecution = taskExecutions.reduce((worst, current) => 
-      !current.isBetterThan(worst) ? current : worst
-    );
-
-    return {
-      taskId: taskId.toString(),
-      executionCount: taskExecutions.length,
-      successCount,
-      failureCount,
-      averageDuration,
-      bestExecution,
-      worstExecution
-    };
-  }
-
-  // Performance analysis
-  isPerformingWell(): boolean {
-    const stats = this.getExecutionStatistics();
-    
-    // Consider performing well if:
-    // 1. Success rate > 70%
-    // 2. Average duration < 5 seconds
-    // 3. Less than 30% slow executions
-    
-    if (stats.totalExecutions < 3) return true; // Not enough data
-    
-    return stats.successRate > 0.7 && 
-           stats.averageDuration < 5000 && 
-           (stats.slowExecutions / stats.totalExecutions) < 0.3;
-  }
-
-  needsOptimization(): boolean {
-    const stats = this.getExecutionStatistics();
-    
-    // Needs optimization if:
-    // 1. Success rate < 50%
-    // 2. Average duration > 10 seconds
-    // 3. More than 50% slow executions
-    
-    if (stats.totalExecutions < 5) return false; // Not enough data
-    
-    return stats.successRate < 0.5 || 
-           stats.averageDuration > 10000 || 
-           (stats.slowExecutions / stats.totalExecutions) > 0.5;
-  }
-
-  // Data export for analysis
-  exportExecutionData(): {
-    context: any;
-    statistics: ExecutionStatistics;
-    executionHistory: any[];
-    performance: {
-      isPerformingWell: boolean;
-      needsOptimization: boolean;
-      bestExecution?: any;
-      worstExecution?: any;
-    };
-  } {
-    return {
-      context: this.context.getSnapshot(),
-      statistics: this.getExecutionStatistics(),
-      executionHistory: this.results.map(result => result.toJSON()),
-      performance: {
-        isPerformingWell: this.isPerformingWell(),
-        needsOptimization: this.needsOptimization(),
-        bestExecution: this.getBestExecution()?.toJSON(),
-        worstExecution: this.getWorstExecution()?.toJSON()
-      }
-    };
   }
 
   // Private helper methods
@@ -456,24 +329,6 @@ export class ExecutionAggregate {
 
   clearDomainEvents(): void {
     this.domainEvents.splice(0, this.domainEvents.length);
-  }
-
-  // Rollback support using checkpoints
-  rollbackToCheckpoint(checkpointName: string): Result<void> {
-    if (!this.stateManager) {
-      return Result.fail('StateManager not available for rollback');
-    }
-    
-    const checkpoint = this.stateManager.getCheckpoint(checkpointName);
-    if (!checkpoint) {
-      return Result.fail(`Checkpoint ${checkpointName} not found`);
-    }
-    
-    // Restore state from checkpoint
-    // This would involve navigating back to the checkpoint URL
-    // and restoring extracted data
-    
-    return Result.ok();
   }
 
   // Helper method to build context from state

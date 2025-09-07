@@ -1,6 +1,6 @@
 import { Result } from '../web/url';
 
-export type EvidenceType = 'screenshot' | 'html' | 'text' | 'element' | 'network' | 'console' | 'error' | 'execution-log';
+export type EvidenceType = 'screenshot' | 'html' | 'text' | 'element' | 'network' | 'console' | 'error' | 'execution-log' | 'extracted-data';
 
 export interface EvidenceMetadata {
   timestamp: Date;

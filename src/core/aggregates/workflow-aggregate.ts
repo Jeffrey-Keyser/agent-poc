@@ -51,7 +51,6 @@ export class WorkflowAggregate {
     plan: Plan,
     session: Session,
   ): Result<WorkflowAggregate> {
-    // Validate that all entities belong together
     if (!plan.getWorkflowId().equals(workflow.getId())) {
       return Result.fail('Plan does not belong to the workflow');
     }
@@ -60,7 +59,6 @@ export class WorkflowAggregate {
       return Result.fail('Session does not belong to the workflow');
     }
 
-    // Validate workflow state is compatible
     if (workflow.isComplete() || workflow.isFailed()) {
       return Result.fail('Cannot create aggregate for completed or failed workflow');
     }

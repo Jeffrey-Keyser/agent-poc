@@ -213,10 +213,6 @@ export class Step {
       return Result.fail('Step is not in pending state');
     }
 
-    if (this.tasks.length === 0) {
-      return Result.fail('Cannot start step with no tasks');
-    }
-
     this.status = StepStatus.Running;
     this.startTime = new Date();
     this.updatedAt = new Date();
