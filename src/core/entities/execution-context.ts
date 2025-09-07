@@ -44,7 +44,6 @@ export class ExecutionContext {
     this.createdAt = new Date();
     this.updatedAt = new Date();
     
-    // Initialize execution environment
     this.environment = {
       currentUrl: initialUrl,
       pageState: undefined,
@@ -64,7 +63,6 @@ export class ExecutionContext {
     viewport: Viewport,
     userAgent?: string
   ): Result<ExecutionContext> {
-    // Validate inputs
     if (viewport.width <= 0 || viewport.height <= 0) {
       return Result.fail('Viewport dimensions must be positive');
     }
@@ -78,7 +76,6 @@ export class ExecutionContext {
     ));
   }
 
-  // Getters
   getId(): SessionId {
     return this.id;
   }
@@ -92,7 +89,6 @@ export class ExecutionContext {
   }
 
   getEnvironment(): ExecutionEnvironment {
-    // Return a deep copy to maintain immutability
     return {
       currentUrl: this.environment.currentUrl,
       pageState: this.environment.pageState,
@@ -136,7 +132,6 @@ export class ExecutionContext {
     return this.updatedAt;
   }
 
-  // Context update methods
   updateCurrentUrl(url: Url): Result<void> {
     this.environment.currentUrl = url;
     this.updatedAt = new Date();
@@ -174,7 +169,6 @@ export class ExecutionContext {
     this.updatedAt = new Date();
   }
 
-  // Task execution context management
   startTaskExecution(taskId: TaskId): Result<void> {
     if (this.currentTaskId) {
       return Result.fail('Another task is already being executed');
@@ -203,13 +197,11 @@ export class ExecutionContext {
     return Result.ok();
   }
 
-  // Force clear stuck executions
   forceResetExecution(): void {
     this.currentTaskId = undefined;
     this.updatedAt = new Date();
   }
 
-  // Context analysis methods
   isTaskRunning(): boolean {
     return this.currentTaskId !== undefined;
   }
@@ -248,7 +240,6 @@ export class ExecutionContext {
     );
   }
 
-  // Context state validation
   isReady(): boolean {
     return !this.isTaskRunning() && 
            this.environment.currentUrl !== undefined &&
@@ -261,7 +252,6 @@ export class ExecutionContext {
   }
 
   isUrlAccessible(): boolean {
-    // Basic URL validation - in reality would check if URL is reachable
     try {
       const url = this.environment.currentUrl.toString();
       return url.startsWith('http://') || url.startsWith('https://');

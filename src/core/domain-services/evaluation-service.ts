@@ -80,11 +80,10 @@ export interface ValidationError {
   severity: 'error' | 'warning';
 }
 
-// Evaluation context for providing additional information
 export interface EvaluationContext {
   originalGoal: string;
   currentUrl: Url;
-  pageState: PageState;
+  pageState?: PageState;
   expectedOutcome?: string;
   validationCriteria?: ValidationCriteria[];
   timeConstraints?: number;

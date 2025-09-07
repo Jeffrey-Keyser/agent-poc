@@ -24,10 +24,7 @@ async function main() {
   });
   
   // Configure variables (if needed)
-  const variables: Variable[] = [
-    new Variable({ name: 'search_term', value: 'wireless headphones', isSecret: false }),
-    new Variable({ name: 'max_price', value: '100', isSecret: false })
-  ];
+  const variables: Variable[] = [];
 
   const workflow = initMultiAgent({
     llm,
@@ -51,14 +48,13 @@ async function main() {
     console.log('🚀 Starting Amazon multi-agent workflow...');
     
     const result = await workflow.execute(
-      'Find the cheapest wireless mouse under $20 with at least 4 stars and return the product URL.',
+      'Can you find a collection of large size grey and black fruit of the loom shirts for men and place them into my cart. Return the product URL that you placed into my cart.',
       'https://amazon.com'    
     );
     
     console.log('📊 Search Results:', result);
     
     if (result.status === 'success') {
-      console.log('✅ Workflow completed successfully!');
       // Truncate full page content for display to keep output manageable
       const displayData = truncateExtractedData(result.extractedData, 500);
       console.log('📈 Extracted data:', displayData);

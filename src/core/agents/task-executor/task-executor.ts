@@ -467,7 +467,6 @@ Use the element indices from the DOM state above.
     };
   }
 
-
   private parseMicroActions(actions: any[]): MicroAction[] {
     return actions.map(action => ({
       type: action.type,

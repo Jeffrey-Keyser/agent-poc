@@ -50,7 +50,6 @@ export {
   VisionAnalysisService
 } from './evaluation-service';
 
-// Re-export key interfaces and types from entities and value objects for convenience
 export { Result } from '../entities/result';
 export { 
   WorkflowId, 

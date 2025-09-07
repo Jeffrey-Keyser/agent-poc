@@ -18,7 +18,8 @@ import {
   ExecutionService, 
   EvaluationService,
   PlanningContext,
-  AITaskPlanningService
+  AITaskPlanningService,
+  EvaluationContext
 } from '../domain-services';
 import { 
   WorkflowEventBus,
@@ -46,7 +47,8 @@ import {
   Session,
   ExecutionContext,
   Step,
-  Task
+  Task,
+  TaskResult
 } from '../entities';
 import {
   Variable,
@@ -77,7 +79,6 @@ interface StateChangeAnalysis {
   requiresReplanning: boolean;
   reason: string;
 }
-
 
 export class WorkflowManager {
   private workflowAggregate: WorkflowAggregate | null = null;
@@ -326,7 +327,7 @@ export class WorkflowManager {
    */
   private async executeStep(step: Step): Promise<{
     stepSuccess: boolean;
-    taskResults: any[];
+    taskResults: TaskResult[];
     successfulTasks: StrategicTask[];
   }> {
     this.reporter.log(`⚡ Executing step: ${step.getDescription()}`);
@@ -338,7 +339,7 @@ export class WorkflowManager {
       return { stepSuccess: false, taskResults: [], successfulTasks: [] };
     }
     
-    const stepTaskResults: any[] = [];
+    const stepTaskResults: TaskResult[] = [];
     const successfulTasks: StrategicTask[] = [];
     
     // TODO: Convert to tasks
@@ -376,7 +377,7 @@ export class WorkflowManager {
    * Execute a single task with error handling and retry logic
    */
   private async executeTask(task: Task, step: Step): Promise<{
-    result: any;
+    result: TaskResult;
     strategicTask?: StrategicTask | undefined;
     shouldBreak: boolean;
   }> {
@@ -399,16 +400,14 @@ export class WorkflowManager {
     const taskStartTime = Date.now();
     
     try {
-      // Build execution context and execute task
       const executionResult = await this.executionService.executeTask(task);
       
-      let taskResult: any;
+      let taskResult: TaskResult;
       let executionEvidence: Evidence[] = [];
       if (executionResult.isSuccess()) {
         const result = executionResult.getValue();
         executionEvidence = result.evidence || [];
         
-        // Evaluate the result
         const evaluationResult = await this.evaluationService.evaluateTaskCompletion(
           task,
           result.evidence,
@@ -420,8 +419,7 @@ export class WorkflowManager {
           success: evaluationResult.isSuccess(),
           duration: Date.now() - taskStartTime,
           data: result.evidence ? result.evidence.map(e => e.getData()) : [],
-          timestamp: new Date(),
-          ...(evaluationResult.isFailure() && { error: evaluationResult.getError() })
+          timestamp: new Date()
         };
       } else {
         taskResult = {
@@ -432,7 +430,6 @@ export class WorkflowManager {
         };
       }
       
-      // Record execution and handle result
       await this.recordTaskExecution(task, taskResult, step);
       
       let strategicTask: StrategicTask | undefined;
@@ -465,7 +462,7 @@ export class WorkflowManager {
         this.completedSteps.set(task.getId().toString(), stepResult);
       }
       
-      return { result: taskResult, strategicTask: strategicTask, shouldBreak };
+      return { result: taskResult, strategicTask, shouldBreak };
       
     } catch (error) {
       const errorResult = {
@@ -485,8 +482,7 @@ export class WorkflowManager {
   /**
    * Record task execution in aggregate and workflow
    */
-  private async recordTaskExecution(task: Task, taskResult: any, currentStep: Step): Promise<void> {
-    // Create evidence if data exists
+  private async recordTaskExecution(task: Task, taskResult: TaskResult, currentStep: Step): Promise<void> {
     const evidence = taskResult.data ? 
       Evidence.create(
         'screenshot',
@@ -494,7 +490,6 @@ export class WorkflowManager {
         { source: 'domain-service-execution', description: 'Domain service task execution' }
       ).getValue() : undefined;
     
-    // Record in execution aggregate
     const recordResult = await this.executionAggregate!.recordExecution(
       task,
       taskResult,
@@ -585,7 +580,6 @@ export class WorkflowManager {
       return false;
     }
     
-    // Check for replanning
     if (this.config.enableReplanning) {
       const replanRequired = await this.checkForReplanning();
       if (replanRequired) {
@@ -594,7 +588,6 @@ export class WorkflowManager {
       }
     }
     
-    // Check for early exit
     if (this.config.allowEarlyExit) {
       const completion = this.calculateCompletionPercentage();
       
@@ -615,7 +608,6 @@ export class WorkflowManager {
     stepTaskResults: any[],
     stepSuccess: boolean
   ): Promise<boolean> {
-    // Complete step with actual results
     const completeStepResult = this.workflowAggregate!.completeStep(
       step.getId(),
       stepTaskResults
@@ -627,7 +619,6 @@ export class WorkflowManager {
     
     this.reporter.log(`✅ Step completed: ${step.getDescription()} (Success: ${stepSuccess})`);
     
-    // Check if workflow is complete
     const status = this.workflowAggregate!.getExecutionStatus();
     if (status.completionPercentage >= 100) {
       this.reporter.log('🎉 Workflow completed successfully');
@@ -668,7 +659,7 @@ export class WorkflowManager {
       // Same step - check if it was reset for retry
       if (step.isPending()) {
         this.reporter.log(`🔄 Step reset for retry: ${step.getDescription()} (${step.getRetryCount()}/${step.getMaxRetries()})`);
-        return true; // Continue loop to retry the step
+        return true;
       } else if (step.isFailed() && !step.canRetry()) {
         this.reporter.log(`💀 Step permanently failed: ${step.getDescription()} (max retries exceeded)`);
         // Try to advance to next step
@@ -692,7 +683,7 @@ export class WorkflowManager {
       }
     }
     
-    return true; // Continue execution
+    return true;
   }
 
   /**
@@ -720,7 +711,6 @@ export class WorkflowManager {
         this.reporter.log(`⚠️ Failed to mark workflow as complete: ${completionResult.getError()}`);
       }
     } else {
-      // Partial or failed completion
       await this.handlePartialCompletion(successfullyCompletedSteps, allExtractedData);
     }
     
@@ -770,8 +760,6 @@ export class WorkflowManager {
   }
 
   private async checkForReplanning(): Promise<boolean> {
-    if (!this.stateManager) return false;
-    
     const currentState = this.stateManager.getCurrentState();
     const previousState = this.stateManager.getPreviousState();
     
@@ -1053,15 +1041,12 @@ export class WorkflowManager {
     }
   }
 
-  private buildEvaluationContext(): any {
+  private buildEvaluationContext(): EvaluationContext {
     const currentUrlObj = Url.create(this.browser.getPageUrl()).getValue();
     
     return {
       originalGoal: this.currentGoal,
-      currentUrl: currentUrlObj,
-      pageState: null, // Will be set by caller if needed
-      workflowId: this.workflow?.getId(),
-      executionContext: this.executionAggregate?.getContext()
+      currentUrl: currentUrlObj
     };
   }
 

@@ -22,25 +22,6 @@ export class VariableManager {
   }
 
   /**
-   * Get public version of text (with secrets masked)
-   */
-  getPublicText(text: string): string {
-    let result = text;
-    
-    for (const [name, variable] of this.variables.entries()) {
-      if (variable.isSecret) {
-        const pattern = new RegExp(`{{${name}}}`, 'g');
-        result = result.replace(pattern, '[REDACTED]');
-      } else {
-        const pattern = new RegExp(`{{${name}}}`, 'g');
-        result = result.replace(pattern, variable.dangerousValue());
-      }
-    }
-    
-    return result;
-  }
-
-  /**
    * Add or update a variable
    */
   setVariable(variable: Variable): void {
