@@ -49,12 +49,14 @@ async function main() {
   const workflow = initMultiAgent({
     llm,
     headless: false,
+    viewport: { width: 1920, height: 1080 },
     variables,
     models: {
       planner: 'gpt-5-nano',
       executor: 'gpt-5-nano',
       evaluator: 'gpt-5-nano',
-      errorHandler: 'gpt-5-nano'
+      errorHandler: 'gpt-5-nano',
+      summarizer: 'gpt-5-nano'
     },
     maxRetries: 3,
     timeout: 300000,
@@ -119,9 +121,12 @@ async function runSearchOnlyWorkflow() {
   const workflow = initMultiAgent({
     llm,
     headless: false,
+    verbose: true,
+    viewport: { width: 1920, height: 1080 },
     variables: [],
-    models: { planner: 'gpt-5-nano', executor: 'gpt-5-nano', evaluator: 'gpt-5-nano' },
+    models: { planner: 'gpt-5-nano', executor: 'gpt-5-nano', evaluator: 'gpt-5-nano', errorHandler: 'gpt-5-nano', summarizer: 'gpt-5-nano' },
     maxRetries: 2,
+    timeout: 300000,
     reporterName: 'GitHubSearch'
   });
   

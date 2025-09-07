@@ -32,12 +32,14 @@ async function main() {
   const workflow = initMultiAgent({
     llm,
     headless: false,
+    viewport: { width: 1920, height: 1080 },
     variables,
     models: {
       planner: 'gpt-5-mini',
       executor: 'gpt-5-mini', 
-      evaluator: 'gpt-5-nano', 
-      errorHandler: 'gpt-5-mini'
+      evaluator: 'gpt-5-mini', 
+      errorHandler: 'gpt-5-mini',
+      summarizer: 'gpt-5-mini'
     },
     maxRetries: 3,
     timeout: 300000,
@@ -49,7 +51,7 @@ async function main() {
     console.log('🚀 Starting Amazon multi-agent workflow...');
     
     const result = await workflow.execute(
-      'Search Amazon for dark roast caffeinated coffee beans and return the URL of the first coffee package that has a rating of 4.5 or higher, is ~$25.00, in stock and is a dark roast. Don\'t utilize filters on the list page.',
+      'Find the cheapest wireless mouse under $20 with at least 4 stars and return the product URL.',
       'https://amazon.com'    
     );
     
