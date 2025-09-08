@@ -62,7 +62,8 @@ import {
 } from '../value-objects';
 import {
   WorkflowAggregate,
-  ExecutionAggregate
+  ExecutionAggregate,
+  ExecutionStatistics
 } from '../aggregates';
 import { LLM } from '../types';
 
@@ -210,7 +211,7 @@ export class WorkflowManager {
     // Launch browser
     await this.browser.launch(initialUrl);
     this.reporter.log(`🌐 Browser launched at: ${initialUrl}`);
-    this.emitWorkflowEvent('workflow:started', { goal });
+    this.emitWorkflowEvent('workflow:started', { goal: this.workflow.goal.toString() });
     
     // Create plan
     const currentUrl = this.browser.getPageUrl();
@@ -441,7 +442,7 @@ export class WorkflowManager {
         
         await this.updateExecutionContextUrl();
       } else {
-        await this.handleTaskFailure(task, taskResult);
+        await this.handleTaskFailure(task);
       }
       
       // Check for early exit or replanning  
@@ -473,7 +474,7 @@ export class WorkflowManager {
       };
       
       task.fail(error instanceof Error ? error : new Error(String(error)));
-      await this.recordTaskFailureInMemory(task, error);
+      await this.recordTaskFailureInMemory(task, error instanceof Error ? error : new Error(String(error)));
       
       return { result: errorResult, shouldBreak: false };
     }
@@ -513,7 +514,7 @@ export class WorkflowManager {
   /**
    * Create strategic task from domain task
    */
-  private createStrategicTaskFromTask(task: any): StrategicTask {
+  private createStrategicTaskFromTask(task: Task): StrategicTask {
     return {
       id: task.getId().toString(),
       step: 1,
@@ -540,7 +541,7 @@ export class WorkflowManager {
   /**
    * Handle task failure including retry logic
    */
-  private async handleTaskFailure(task: any, _taskResult: any): Promise<void> {
+  private async handleTaskFailure(task: Task): Promise<void> {
     if (task.canRetry()) {
       this.reporter.log(`🔄 Retrying task ${task.getRetryCount()}/${task.getMaxRetries()}`);
       const retryResult = task.retry();
@@ -553,7 +554,7 @@ export class WorkflowManager {
   /**
    * Record task failure in memory service
    */
-  private async recordTaskFailureInMemory(task: any, error: any): Promise<void> {
+  private async recordTaskFailureInMemory(task: Task, error: Error): Promise<void> {
     const beforeState = await this.captureSemanticState();
     const context: MemoryContext = {
       url: this.browser.getPageUrl(),
@@ -575,7 +576,7 @@ export class WorkflowManager {
   /**
    * Check conditions after task execution (early exit, replanning)
    */
-  private async checkPostTaskConditions(taskResult: any): Promise<boolean> {
+  private async checkPostTaskConditions(taskResult: TaskResult): Promise<boolean> {
     if (!taskResult.success) {
       return false;
     }
@@ -605,7 +606,7 @@ export class WorkflowManager {
    */
   private async processStepCompletion(
     step: Step,
-    stepTaskResults: any[],
+    stepTaskResults: TaskResult[],
     stepSuccess: boolean
   ): Promise<boolean> {
     const completeStepResult = this.workflowAggregate!.completeStep(
@@ -643,7 +644,7 @@ export class WorkflowManager {
   /**
    * Handle step failure including retry logic and replanning
    */
-  private async handleStepFailure(currentStep: any): Promise<boolean> {
+  private async handleStepFailure(currentStep: Step): Promise<boolean> {
     this.reporter.log(`❌ Step failed: ${currentStep.getDescription()}`);
     
     // Check current step state after completeStep processing
@@ -725,7 +726,7 @@ export class WorkflowManager {
    */
   private async handlePartialCompletion(
     successfullyCompletedSteps: StrategicTask[],
-    allExtractedData: any
+    allExtractedData: Record<string, any>
   ): Promise<void> {
     const successfulSteps = successfullyCompletedSteps.length;
     const totalSteps = this.currentPlan?.getSteps().length || 0;
@@ -857,7 +858,13 @@ export class WorkflowManager {
     let workflowStatus: WorkflowResult['status'] = 'failure';
     let workflowId = `workflow-${Date.now()}`;
     let workflowGoal = '';
-    let executionStats: any = {};
+    let executionStats: ExecutionStatistics = {
+      totalExecutions: 0,
+      successfulExecutions: 0,
+      failedExecutions: 0,
+      retryExecutions: 0,
+      evidenceCount: 0
+    };
     
     if (this.workflowAggregate && this.executionAggregate) {
       // Use aggregate data

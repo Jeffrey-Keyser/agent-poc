@@ -7,3 +7,9 @@ export {
   SchemaField, 
   FieldType 
 } from './extraction-schema';
+export { 
+  MicroAction, 
+  MicroActionType, 
+  MicroActionData, 
+  WaitCondition 
+} from './micro-action';

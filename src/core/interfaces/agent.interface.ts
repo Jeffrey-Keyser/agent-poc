@@ -1,11 +1,11 @@
 // Import types from agent-types.ts
 import type { 
   StrategicTask, 
-  MicroAction, 
   ActionResult, 
   PageState,
   StepResult
 } from '../types/agent-types';
+import { MicroActionData } from '../value-objects/task';
 
 export interface IAgent<TInput, TOutput> {
   name: string;
@@ -40,7 +40,7 @@ export interface ExecutorInput {
 
 export interface ExecutorOutput {
   taskId: string;
-  microActions: MicroAction[];
+  microActions: MicroActionData[];
   results: ActionResult[];
   finalState: PageState;
   timestamp: Date;
@@ -50,7 +50,7 @@ export interface EvaluatorInput {
   step: StrategicTask;
   beforeState: PageState;
   afterState: PageState;
-  microActions: MicroAction[];
+  microActions: MicroActionData[];
   results: ActionResult[];
   screenshots?: {
     before: string;

@@ -1,4 +1,4 @@
-import { Variable } from '../value-objects';
+import { MicroActionData, Variable } from '../value-objects';
 
 // Strategic level - what the Planner creates
 export interface StrategicTask {
@@ -6,24 +6,6 @@ export interface StrategicTask {
   step: number;
   description: string;
   expectedOutcome: string;
-}
-
-// Tactical level - what the Executor creates at runtime
-export interface MicroAction {
-  type: 'click' | 'fill' | 'scroll' | 'wait' | 'extract' | 'press_key' | 
-        'clear' | 'hover' | 'select_option' | 'wait_for_element' | 'drag' |
-        'extract_url' | 'extract_href';
-  selector?: string; // Determined at execution time from DOM
-  elementIndex?: number; // Index from getInteractiveElements()
-  value?: any;
-  element?: DOMElement; // Actual element from current page state
-  description?: string; // For debugging and logging
-  key?: string; // For press_key actions
-  options?: string[]; // For select_option action
-  waitCondition?: 'visible' | 'hidden' | 'attached' | 'detached'; // For wait_for_element
-  timeout?: number; // For wait_for_element (in milliseconds)
-  startIndex?: number; // For drag action - starting element index
-  endIndex?: number; // For drag action - ending element index
 }
 
 export interface StrategicPlan {
@@ -38,7 +20,7 @@ export interface StepResult {
   stepId: string;
   status: 'success' | 'failure' | 'partial';
   success: boolean; // Added for compatibility with workflow-manager
-  microActions: MicroAction[]; // What was actually executed
+  microActions: MicroActionData[]; // What was actually executed
   evidence: {
     beforeState?: PageState;
     afterState?: PageState;
@@ -76,7 +58,7 @@ export interface DOMElement {
 }
 
 export interface ActionResult {
-  action: MicroAction;
+  action: MicroActionData;
   success: boolean;
   error?: string;
   duration?: number;
@@ -206,5 +188,5 @@ export interface InteractionContext {
   element: DOMElement;
   pageState: PageState;
   intent: StrategicTask;
-  previousActions: MicroAction[];
+  previousActions: MicroActionData[];
 }

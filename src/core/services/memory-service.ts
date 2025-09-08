@@ -72,15 +72,13 @@ export class MemoryService {
         await this.memoryRepository.savePattern(learnedPattern);
       } catch (error) {
         console.error('Failed to save pattern to repository:', error);
-        // Fallback to legacy storage
+        
         this.addToLegacyStorage(entry, context);
       }
     } else {
-      // Use legacy storage
       this.addToLegacyStorage(entry, context);
     }
 
-    // Emit event for monitoring
     this.eventBus?.emit('memory:learning-added', entry);
   }
   

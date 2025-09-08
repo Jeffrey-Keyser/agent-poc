@@ -10,8 +10,9 @@ import { TaskId, ActionType, Evidence, Duration } from '../../core/value-objects
 import { Browser } from '../../core/interfaces/browser.interface';
 import { LLM } from '../../core/interfaces/llm.interface';
 import { TaskExecutorAgent } from '../../core/agents/task-executor/task-executor';
-import { ExecutorConfig, ExecutorInput, MicroAction } from '../../core/types/agent-types';
+import { ExecutorConfig, ExecutorInput } from '../../core/types/agent-types';
 import { DomService } from '../../infra/services/dom-service';
+import { MicroActionData } from '../../core/value-objects/task';
 
 /**
  * Infrastructure implementation of ExecutionService that bridges to the existing TaskExecutorAgent
@@ -152,7 +153,7 @@ export class BrowserExecutionService implements ExecutionService {
   }
 
   private convertMicroActionsToExecutionActions(
-    microActions: MicroAction[], 
+    microActions: MicroActionData[], 
     taskId: TaskId
   ): ExecutionAction[] {
     return microActions.map(action => {

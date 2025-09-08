@@ -36,6 +36,13 @@ export class VariableManager {
   }
 
   /**
+   * Get all variables
+   */
+  getVariables(): Map<string, Variable> {
+    return this.variables;
+  }
+
+  /**
    * Check if text contains any secret variables
    */
   containsSecrets(text: string): boolean {
