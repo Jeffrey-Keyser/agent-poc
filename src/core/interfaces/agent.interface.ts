@@ -41,7 +41,6 @@ export interface ExecutorInput {
 export interface ExecutorOutput {
   taskId: string;
   microActions: MicroActionData[];
-  results: ActionResult[];
   finalState: PageState;
   timestamp: Date;
 }

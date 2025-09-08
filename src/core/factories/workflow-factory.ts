@@ -6,6 +6,8 @@ import { ITaskSummarizer } from '../interfaces/agent.interface';
 import { WorkflowManager } from '../services/workflow-manager';
 import { DomService } from '@/infra/services/dom-service';
 import { TaskSummarizerAgent } from '../agents/task-summarizer';
+import { MicroActionExecutor } from '../../infrastructure/services/micro-action-executor';
+import { VariableManager } from '../services/variable-manager';
 import { 
   BrowserExecutionService, 
   AIEvaluationService,
@@ -69,7 +71,14 @@ export class WorkflowFactory {
     config: InitMultiAgentConfig, 
     infrastructure: Infrastructure
   ): WorkflowManager {
-    const services = this.createDomainServices(infrastructure, config);
+    const variableManager = new VariableManager(config.variables || []);
+    const microActionExecutor = new MicroActionExecutor(
+      infrastructure.browser,
+      infrastructure.domService,
+      variableManager
+    );
+    
+    const services = this.createDomainServices(infrastructure, config, microActionExecutor);
     const repositories = this.createRepositories(config);
     
     return new WorkflowManager(
@@ -82,6 +91,7 @@ export class WorkflowFactory {
       infrastructure.eventBus,
       infrastructure.browser,
       infrastructure.domService,
+      microActionExecutor,
       infrastructure.reporter,
       this.createSummarizer(config.llm, config),
       {
@@ -96,12 +106,14 @@ export class WorkflowFactory {
    */
   private static createDomainServices(
     infrastructure: Infrastructure, 
-    config: InitMultiAgentConfig
+    config: InitMultiAgentConfig,
+    microActionExecutor: MicroActionExecutor
   ): Services {
     const executionService = new BrowserExecutionService(
       config.llm,
       infrastructure.browser,
       infrastructure.domService,
+      microActionExecutor,
       {
         llm: config.llm,
         model: config.models?.executor || 'gpt-5-nano',

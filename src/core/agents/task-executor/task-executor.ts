@@ -1,13 +1,12 @@
 import { LLM } from '../../interfaces/llm.interface';
 import { Browser } from '../../interfaces/browser.interface';
 import { ITaskExecutor, ExecutorInput, ExecutorOutput } from '../../interfaces/agent.interface';
-import { ExecutorConfig, ActionResult, PageState } from '../../types/agent-types';
+import { ExecutorConfig, PageState } from '../../types/agent-types';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { JsonOutputParser } from '@langchain/core/output_parsers';
 import { TASK_EXECUTOR_PROMPT } from './task-executor.prompt';
-import { DomService } from '../../../infra/services/dom-service';
-import { MicroActionExecutor } from '../../../infrastructure/services/micro-action-executor';
-import { MicroAction, MicroActionData } from '@/core/value-objects/task';
+import { MicroActionData } from '@/core/value-objects/task';
+import { DomService } from '@/infra/services/dom-service';
 
 /**
  * TaskExecutorAgent - Executes strategic tasks by decomposing them into micro-actions
@@ -28,23 +27,17 @@ export class TaskExecutorAgent implements ITaskExecutor {
   public readonly name = 'TaskExecutor';
   public readonly model: string;
   public readonly maxRetries: number;
-  
+
+  private domService: DomService;
   private llm: LLM;
   private browser: Browser;
-  private domService: DomService;
-  private microActionExecutor: MicroActionExecutor;
 
   constructor(llm: LLM, browser: Browser, domService: DomService, config: ExecutorConfig) {
     this.llm = llm;
     this.browser = browser;
-    this.domService = domService;
     this.model = config.model;
     this.maxRetries = config.maxRetries || 3;
-    this.microActionExecutor = new MicroActionExecutor(
-      browser,
-      domService,
-      config.variableManager
-    );
+    this.domService = domService;
   }
 
   /**
@@ -64,68 +57,25 @@ export class TaskExecutorAgent implements ITaskExecutor {
         pixelBelow
       } = await this.domService.getInteractiveElements();
 
-      // TODO: This should probably be split out
       const microActions = await this.decomposeStrategicStep(
-        input.expectedOutcome, 
+        input.expectedOutcome,
         stringifiedDomState,
-        { screenshot, pristineScreenshot, pixelAbove, pixelBelow },
-        input.memoryLearnings,
+        {
+          screenshot,
+          pristineScreenshot,
+          pixelAbove,
+          pixelBelow
+        },
+        input.memoryLearnings
       );
       
-      console.log(`🔍 Decomposed micro-actions: ${JSON.stringify(microActions)}`);
+      console.log(`🔍 Decomposed into ${microActions.length} micro-actions`);
 
-      // Execute each micro-action sequentially  
-      const results: ActionResult[] = [];
-      const extractedData: Record<string, any> = {}; // Collect extracted data
-
-      for (const microActionData of microActions) {
-        try {
-          // Convert plain object to MicroAction value object
-          const actionResult = MicroAction.create(microActionData);
-          if (!actionResult.isSuccess()) {
-            throw new Error(`Failed to create MicroAction: ${actionResult.getError()}`);
-          }
-          
-          const action = actionResult.getValue();
-          const executionResult = await this.microActionExecutor.execute(action);
-          results.push(executionResult);
-
-          // If action failed, stop execution
-          if (!executionResult.success) {
-            break;
-          }
-
-          // Collect extracted data if present
-          if (action.isExtractionAction() && executionResult.extractedValue !== null) {
-            const key = action.getDescription() || `element_${action.getElementIndex() || Date.now()}`;
-            extractedData[key] = executionResult.extractedValue;
-            console.log(`💾 Stored extracted data with key: ${key}`);
-          }
-
-          // Refresh page state after significant actions
-          if (this.shouldRefreshState(action)) {
-            await this.wait(500); // Brief wait for page updates
-          }
-
-        } catch (error) {
-          results.push({
-            action: microActionData,
-            success: false,
-            error: error instanceof Error ? error.message : 'Unknown error',
-            timestamp: new Date(),
-            duration: 0
-          });
-          break;
-        }
-      }
-
-      const finalState = await this.captureCurrentState(extractedData);
-
+      // Return decomposition result without execution
       const output: ExecutorOutput = {
         taskId: "",
         microActions,
-        results,
-        finalState,
+        finalState: await this.captureCurrentState(),
         timestamp: new Date()
       };
 
@@ -136,7 +86,7 @@ export class TaskExecutorAgent implements ITaskExecutor {
       return output;
 
     } catch (error) {
-      throw new Error(`Task execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Task decomposition failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -152,7 +102,6 @@ export class TaskExecutorAgent implements ITaskExecutor {
       output &&
       typeof output.taskId === 'string' &&
       Array.isArray(output.microActions) &&
-      Array.isArray(output.results) &&
       output.finalState &&
       output.timestamp instanceof Date
     );
@@ -219,25 +168,14 @@ Use the element indices from the DOM state above.
     return this.parseMicroActions(response.microActions);
   }
 
-  /**
-   * Check if page state should be refreshed after an action
-   */
-  private shouldRefreshState(action: MicroAction): boolean {
-    return action.getType() === 'click' || action.getType() === 'press_key';
-  }
 
-
-  private async wait(duration: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, duration));
-  }
-
-  private async captureCurrentState(extractedData?: Record<string, any>): Promise<PageState> {
+  private async captureCurrentState(): Promise<PageState> {
     return {
       url: this.browser.getPageUrl(),
       title: await this.browser.getPage().title(),
       visibleSections: [],
       availableActions: [],
-      extractedData: extractedData || {}
+      extractedData: {}
     };
   }
 
@@ -255,5 +193,4 @@ Use the element indices from the DOM state above.
       endIndex: action.endIndex
     }));
   }
-
 }
