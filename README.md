@@ -1,6 +1,6 @@
-# Agents - Web Automation Framework
+# Web Automation Framework
 
-A powerful TypeScript-based web automation framework featuring a modern multi-agent architecture for intelligent browser automation.
+A production-ready TypeScript-based web automation framework featuring a sophisticated multi-agent architecture with Domain-Driven Design (DDD) principles for intelligent browser automation.
 
 ## 📋 Table of Contents
 
@@ -18,16 +18,18 @@ A powerful TypeScript-based web automation framework featuring a modern multi-ag
 
 ## 🎯 Project Overview
 
-This repository contains a sophisticated multi-agent automation system:
+This repository contains a production-ready multi-agent web automation system built with TypeScript and Domain-Driven Design principles:
 
-- Modern modular architecture with specialized agents
-- Separation of concerns (Planning, Execution, Evaluation)
-- Enhanced with visual understanding (screenshots)
-- Memory learning system
-- Variable management for secrets
-- Domain-Driven Design (DDD) principles
-- Event-driven architecture
-- Workflow orchestration capabilities
+### Key Features
+- **Multi-Agent Architecture**: Specialized agents for planning, execution, evaluation, and error handling
+- **Domain-Driven Design**: Clean architecture with aggregates, entities, value objects, and domain events
+- **Intelligent Task Execution**: Runtime DOM discovery with micro-actions for precise browser control
+- **Visual Understanding**: Screenshot analysis for enhanced context awareness
+- **Memory & Learning**: Persistent memory service that learns from past executions
+- **Variable Management**: Secure handling of secrets and dynamic variable interpolation
+- **Event-Driven Architecture**: Comprehensive event system for workflow coordination
+- **Error Recovery**: Intelligent error analysis and recovery strategies
+- **Workflow Orchestration**: Advanced workflow management with state tracking
 
 ## 🏗️ Architecture
 
@@ -63,16 +65,23 @@ This repository contains a sophisticated multi-agent automation system:
        └─────────────────────────────────────────┘
 ```
 
-#### Key Components:
+### Core Components
 
-- **Task Planner**: Decomposes high-level goals into strategic steps
-- **Task Executor**: Executes strategic steps via micro-actions
-- **Task Evaluator**: Validates task completion
-- **Error Handler**: Analyzes failures and suggests recovery strategies
-- **Workflow Manager**: Orchestrates agent interactions
-- **State Manager**: Tracks page state and extracted data
-- **Memory Service**: Learns from successes and failures
-- **Variable Manager**: Handles secrets and variable interpolation
+#### Agents
+- **TaskPlanner**: Strategic decomposition of high-level goals into actionable steps (3-7 steps)
+- **TaskExecutor**: Tactical execution using micro-actions with runtime DOM discovery
+- **TaskEvaluator**: Validates task completion and success criteria
+- **ErrorHandler**: Intelligent failure analysis and recovery strategy generation
+- **TaskSummarizer**: Creates structured summaries of completed workflows
+
+#### Core Services
+- **WorkflowManager**: Central orchestrator for multi-agent coordination
+- **StateManager**: Tracks page state, DOM changes, and extracted data
+- **MemoryService**: Persistent learning from past executions
+- **VariableManager**: Secure secret handling and variable interpolation
+- **TaskQueue**: Priority-based task management
+- **WorkflowMonitor**: Real-time observability and metrics
+- **DomainEventBridge**: Event coordination across bounded contexts
 
 
 ## 🚀 Quick Start
@@ -101,13 +110,24 @@ export OPENAI_API_KEY=sk-your-api-key-here
 
 ```typescript
 import { initMultiAgent } from './src/init-multi-agent';
+import { ChatOpenAI } from './src/models/chat-openai';
 
-const workflow = initMultiAgent({
+// Initialize LLM
+const llm = new ChatOpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4o-mini'
+});
+
+// Initialize multi-agent workflow
+const workflow = initMultiAgent({
+  llm,
   headless: false,
+  verbose: true,
+  viewport: { width: 1280, height: 720 },
   variables: []
 });
 
+// Execute automation workflow
 const result = await workflow.executeWorkflow(
   'Search for wireless headphones under $100',
   'https://amazon.com'
@@ -119,83 +139,85 @@ await workflow.cleanup();
 
 ## 📁 Entry Points
 
-### Production Entry Points
+### Main Entry Points
 
 | File | Purpose | Usage |
 |------|----------|--------|
-| `agent-amazon-multi.ts` | Amazon automation with extraction | `npm run start:amazon-multi` |
-| `src/index.ts` | Main entry point | `npm start` |
-
-### Development Entry Points
-
-| File | Purpose |
-|------|----------|
-| `src/init-multi-agent.ts` | Multi-agent system initializer |
-| `src/init-agents.ts` | Unified initializer with feature flags |
+| `agent-amazon-multi.ts` | Amazon automation example with multi-agent system | `npm start` or `npm run start:multi` |
+| `src/index.ts` | Library exports for programmatic use | Import in your code |
+| `src/init-multi-agent.ts` | Multi-agent system factory | Core initialization |
 
 ## 🏗️ Architecture Features
 
 | Feature | Implementation |
 |---------|----------------|
-| **Architecture** | Modular multi-agent system |
-| **Prompt Size** | 50-80 lines per specialized agent |
-| **Maintainability** | High - separated concerns |
-| **Cost Efficiency** | Optimized models per agent type |
-| **Visual Understanding** | Advanced screenshot analysis |
-| **Memory/Learning** | Persistent learning system |
-| **Variable Management** | Secure secret handling |
-| **Error Recovery** | Intelligent replanning |
-| **Strategic Planning** | Dedicated planning agent |
-| **Debugging** | Isolated, testable components |
-| **Test Coverage** | Comprehensive DDD testing |
+| **Architecture Pattern** | Domain-Driven Design with multi-agent system |
+| **Design Principles** | SOLID, Clean Architecture, Bounded Contexts |
+| **Agent Specialization** | Focused agents with single responsibilities |
+| **Prompt Engineering** | Optimized 50-80 line prompts per agent |
+| **Model Optimization** | Agent-specific model selection for cost efficiency |
+| **Visual Understanding** | Screenshot analysis with DOM correlation |
+| **Memory System** | Persistent learning with success/failure tracking |
+| **Variable Management** | Secure secrets with interpolation support |
+| **Error Recovery** | Intelligent failure analysis and replanning |
+| **Task Execution** | Micro-actions with runtime DOM discovery |
+| **Event Architecture** | Comprehensive domain events with EventBus |
+| **Observability** | Real-time monitoring and metrics |
 
 ## ⚙️ Configuration
 
 ### Multi-Agent Configuration
 
 ```typescript
-interface MultiAgentConfig {
-  apiKey: string;
-  headless: boolean;
-  variables: Variable[];
-  models?: {
-    planner?: string;    // default: 'gpt-5-nano'
-    executor?: string;   // default: 'gpt-5-nano'
-    evaluator?: string;  // default: 'gpt-5-nano'
+interface InitMultiAgentConfig {
+  llm: LLM;                    // LLM instance (e.g., ChatOpenAI)
+  headless: boolean;           // Browser headless mode
+  verbose: boolean;            // Enable detailed logging
+  viewport: {                  // Browser viewport
+    width: number;
+    height: number;
   };
-  maxRetries?: number;   // default: 3
-  timeout?: number;       // default: 300000ms
+  variables?: Variable[];      // Secret/variable management
+  maxRetries?: number;         // Max retry attempts (default: 3)
+  timeout?: number;            // Execution timeout in ms (default: 300000)
+  startUrl?: string;           // Initial browser URL
 }
 ```
 
 ### Variable Management
 
 ```typescript
-import { Variable } from './src/core/entities/variable';
+import { Variable } from './src/core/value-objects/variable';
 
-const password = new Variable({
+// Secure handling of secrets
+const password = Variable.create({
   name: 'password',
-  value: process.env.PASSWORD,
+  value: process.env.PASSWORD!,
   isSecret: true  // Won't be sent to LLM or logged
-});
+}).getValue();
 
-const username = new Variable({
+const username = Variable.create({
   name: 'username',
   value: 'user@example.com',
   isSecret: false
-});
+}).getValue();
 
-// Use in prompts: "Login with {{username}} and {{password}}"
+// Variables are automatically interpolated in prompts:
+// "Login with {{username}} and {{password}}"
 ```
 
-### Environment-Specific Configurations
+### LLM Configuration
 
 ```typescript
-import { getDeploymentConfig } from './src/core/config/deployment-config';
+import { ChatOpenAI } from './src/models/chat-openai';
 
-// Get optimized config for environment
-const config = getDeploymentConfig('production');
-// or: 'development', 'testing', 'staging'
+// Configure OpenAI model
+const llm = new ChatOpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4o-mini',  // or 'gpt-4', 'gpt-3.5-turbo'
+  temperature: 0.7,
+  maxTokens: 2000
+});
 ```
 
 ## 🛠️ Development
@@ -203,36 +225,53 @@ const config = getDeploymentConfig('production');
 ### Project Structure
 
 ```
-agents/
+web-automation-framework/
 ├── src/
-│   ├── core/
-│   │   ├── aggregates/       # DDD aggregates
-│   │   ├── entities/         # Domain entities
-│   │   ├── value-objects/    # DDD value objects
-│   │   ├── domain-services/  # Domain services
-│   │   ├── domain-events/    # Event system
-│   │   ├── repositories/     # Data repositories
-│   │   ├── agents/           # Agent implementations
-│   │   │   ├── task-planner/ # Strategic planning agent
-│   │   │   ├── task-executor/# Tactical execution agent
-│   │   │   ├── task-evaluator/# Outcome evaluation agent
-│   │   │   └── task-summarizer/# Result summarization
-│   │   ├── services/         # Application services
-│   │   │   ├── workflow-manager.ts
-│   │   │   ├── state-manager.ts
-│   │   │   ├── memory-service.ts
-│   │   │   └── variable-manager.ts
-│   │   ├── interfaces/       # TypeScript interfaces
-│   │   └── types/            # Type definitions
-│   ├── infrastructure/       # Infrastructure layer
-│   │   ├── repositories/     # Repository implementations
-│   │   ├── services/         # Infrastructure services
-│   │   └── event-handlers/   # Event handlers
-│   ├── infra/               # Browser automation layer
-│   │   └── services/        # Browser, DOM, Reporter
-│   └── models/              # LLM integrations
-├── docs/                    # Documentation
-└── __tests__/              # Test suites
+│   ├── core/                     # Domain layer (DDD)
+│   │   ├── aggregates/          # Workflow & Execution aggregates
+│   │   ├── entities/            # Plan, Step, Task, Session, Workflow
+│   │   ├── value-objects/       # Immutable domain concepts
+│   │   │   ├── identifiers/     # WorkflowId, TaskId, etc.
+│   │   │   ├── execution/       # Confidence, Duration, Priority
+│   │   │   ├── task/            # MicroAction, Intent, Evidence
+│   │   │   ├── web/             # URL, PageState, ElementSelector
+│   │   │   └── variable.ts      # Variable with interpolation
+│   │   ├── domain-services/     # Planning, Execution, Evaluation
+│   │   ├── domain-events/       # Event definitions and EventBus
+│   │   ├── repositories/        # Repository interfaces
+│   │   ├── factories/           # AgentFactory, WorkflowFactory
+│   │   ├── sagas/              # WorkflowSaga for orchestration
+│   │   ├── agents/             # Agent implementations
+│   │   │   ├── task-planner/   # Strategic planning (3-7 steps)
+│   │   │   ├── task-executor/  # Tactical execution with micro-actions
+│   │   │   ├── task-evaluator/ # Success validation
+│   │   │   ├── error-handler/  # Failure analysis & recovery
+│   │   │   └── task-summarizer/# Workflow summarization
+│   │   ├── services/           # Core application services
+│   │   │   ├── workflow-manager.ts    # Central orchestrator
+│   │   │   ├── state-manager.ts       # Page state tracking
+│   │   │   ├── memory-service.ts      # Learning system
+│   │   │   ├── variable-manager.ts    # Variable handling
+│   │   │   ├── task-queue.ts          # Priority queue
+│   │   │   ├── workflow-monitor.ts    # Observability
+│   │   │   └── domain-event-bridge.ts # Event coordination
+│   │   ├── interfaces/         # Core interfaces (LLM, etc.)
+│   │   └── types/              # Type definitions
+│   ├── infrastructure/         # Infrastructure implementations
+│   │   ├── repositories/       # In-memory repositories
+│   │   ├── services/          # Infrastructure services
+│   │   └── event-handlers/    # Event handler implementations
+│   ├── infra/                 # Browser automation layer
+│   │   └── services/
+│   │       ├── chromium-browser.ts      # Playwright browser
+│   │       ├── dom-service.ts           # DOM manipulation
+│   │       ├── playwright-screenshotter.ts # Screenshots
+│   │       └── console-reporter.ts      # Console output
+│   └── models/                # LLM integrations
+│       └── chat-openai.ts     # OpenAI integration
+├── docs/                      # Architecture & design docs
+├── agent-amazon-multi.ts      # Example implementation
+└── package.json              # Dependencies & scripts
 ```
 
 ### Building
@@ -241,255 +280,280 @@ agents/
 # TypeScript compilation
 npm run build
 
-# Watch mode for development
+# Build and run
+npm run build:run
+
+# Development mode with watch
 npm run dev
 
-# Type checking only
-npm run type-check
+# Clean build artifacts
+npm run clean
 ```
 
 ### Available Scripts
 
 ```bash
-npm start              # Run default entry point
-npm run build         # Compile TypeScript
-npm run dev          # Development mode with watch
-npm test             # Run test suite
-npm run lint         # Run linter
-npm run clean        # Clean build artifacts
+npm start                     # Run Amazon multi-agent example
+npm run start:multi          # Same as npm start
+npm run dev                  # Development mode with watch
+npm run build                # Compile TypeScript to JavaScript
+npm run build:run            # Build and run compiled code
+npm run clean                # Remove dist directory
+npm run install:browsers     # Install Playwright browsers
+npm test                     # Run test suite (placeholder)
 ```
 
 ## 🧪 Testing
 
-### Running Tests
+### Test Status
+
+Currently, the project has unit tests for core DDD components. The test suite is being expanded.
 
 ```bash
-# Run all tests
+# Run tests (currently placeholder)
 npm test
 
-# Run with coverage
-npm run test:coverage
-
-# Run specific test suite
-npm test task-executor
-
-# Run integration tests
-npm run test:integration
+# Test files are located alongside source files
+src/core/aggregates/__tests__/
+src/core/entities/__tests__/
+src/core/value-objects/__tests__/
 ```
 
-### Test Structure
+### Test Architecture
 
-```typescript
-// Example test for extraction functionality
-describe('TaskExecutor', () => {
-  it('should extract data from page elements', async () => {
-    const executor = new TaskExecutor(/*...*/);
-    const result = await executor.execute({
-      task: { intent: 'extract', /*...*/ },
-      pageState: mockPageState
-    });
-    
-    expect(result.finalState.extractedData).toHaveProperty('title');
-    expect(result.finalState.extractedData.title).toBe('Expected Title');
-  });
-});
-```
+- **Unit Tests**: Domain logic, value objects, entities, aggregates
+- **Integration Tests**: Service orchestration, workflow execution
+- **Component Tests**: Individual agent behavior
+- **E2E Tests**: Full workflow automation scenarios
 
 ## 🔧 Troubleshooting
 
 ### Common Issues
 
-#### 1. Task Execution Issues
-**Problem**: Tasks may fail due to DOM changes or timing issues.
-
-**Solution**: The system includes intelligent error recovery:
-- Automatic retry with exponential backoff
-- Error analysis and recovery suggestions
-- Workflow replanning capabilities
-
-#### 2. "API key not found" Error
+#### 1. "API key not found" Error
 ```bash
-# Ensure API key is set
+# Set environment variable
 export OPENAI_API_KEY=sk-your-actual-key-here
-# Or create .env file
-echo "OPENAI_API_KEY=sk-your-key" > .env
+
+# Or create .env file from template
+cp .env.example .env
+# Edit .env and add your API key
 ```
 
-#### 3. Browser Launch Failures
+#### 2. Browser Launch Failures
 ```bash
 # Install Playwright browsers
+npm run install:browsers
+# or
 npx playwright install chromium
 
-# For headless issues, try headed mode
-headless: false  # in config
+# For headless issues, set headless: false in config
 ```
 
-#### 4. Memory/Performance Issues
-- Reduce `maxRetries` in config
-- Use smaller models for executor/evaluator
-- Enable headless mode for better performance
-- Clear extracted data between workflows
+#### 3. Task Execution Failures
+The system includes intelligent error recovery:
+- **Automatic Retry**: Exponential backoff with configurable max retries
+- **Error Analysis**: ErrorHandler agent analyzes failures
+- **Recovery Strategies**: Automatic replanning on failures
+- **DOM Changes**: Runtime discovery adapts to page changes
+
+#### 4. Performance Optimization
+- Use `headless: true` for better performance
+- Adjust `viewport` size to reduce rendering overhead
+- Configure appropriate `timeout` values
+- Use `verbose: false` in production
 
 ### Debug Mode
 
 Enable detailed logging:
 
 ```bash
-# Set debug environment variable
-DEBUG=agents:* npm start
+# Environment variables for debugging
+DEBUG=openai-agents:* npm start     # All debug logs
+DEBUG=openai-agents:core npm start  # Core execution only
 
-# Or in code
+# In code
 const workflow = initMultiAgent({
-  debug: true,
+  verbose: true,  // Enable verbose logging
+  headless: false, // See browser actions
   // ... other config
 });
 ```
 
-### Viewing Logs
+### Logging & Output
 
-- Console output: Real-time execution logs
-- `output.txt`: Detailed execution history
-- Screenshots: Check `screenshots/` directory
-- Browser console: Available in headed mode
+- **Console Output**: Real-time execution logs with agent decisions
+- **Screenshots**: Captured on failures (when screenshotter is configured)
+- **Browser Console**: Available in headed mode (`headless: false`)
+- **Event Logs**: Domain events tracked via EventBus
 
-## 🔧 Advanced Configuration
+## 🔧 Advanced Usage
 
 ### Workflow Orchestration
 
 ```typescript
 import { initMultiAgent } from './src/init-multi-agent';
+import { ChatOpenAI } from './src/models/chat-openai';
+import { Variable } from './src/core/value-objects/variable';
 
-const workflow = initMultiAgent({
+// Configure LLM with specific model
+const llm = new ChatOpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
-  headless: false,
-  variables: [],
-  models: {
-    planner: 'gpt-4',    // Strategic planning
-    executor: 'gpt-3.5', // Tactical execution
-    evaluator: 'gpt-3.5' // Outcome validation
-  },
-  maxRetries: 3,
-  timeout: 300000
+  model: 'gpt-4o-mini',
+  temperature: 0.7
 });
+
+// Initialize with advanced configuration
+const workflow = initMultiAgent({
+  llm,
+  headless: false,
+  verbose: true,
+  viewport: { width: 1920, height: 1080 },
+  maxRetries: 5,
+  timeout: 600000, // 10 minutes
+  startUrl: 'https://google.com',
+  variables: [
+    Variable.create({ 
+      name: 'apiKey', 
+      value: process.env.API_KEY!, 
+      isSecret: true 
+    }).getValue()
+  ]
+});
+
+// Execute complex workflow
+const result = await workflow.executeWorkflow(
+  'Navigate to Amazon, search for laptops, extract top 5 results with prices',
+  'https://amazon.com'
+);
+
+// Access results
+console.log('Extracted Data:', result.extractedData);
+console.log('Execution Steps:', result.steps);
+console.log('Success:', result.success);
+
+await workflow.cleanup();
 ```
 
 ### Event-Driven Monitoring
 
 ```typescript
-// Listen to workflow events
-workflow.eventBus.subscribe('WorkflowStarted', (event) => {
-  console.log('Workflow started:', event.workflowId);
+// Subscribe to domain events for monitoring
+const eventBus = workflow.getEventBus();
+
+eventBus.subscribe('WorkflowStarted', (event) => {
+  console.log(`Workflow ${event.workflowId} started`);
 });
 
-workflow.eventBus.subscribe('TaskCompleted', (event) => {
-  console.log('Task completed:', event.taskId);
+eventBus.subscribe('StepCompleted', (event) => {
+  console.log(`Step completed: ${event.description}`);
+});
+
+eventBus.subscribe('TaskFailed', (event) => {
+  console.error(`Task failed: ${event.error}`);
+});
+
+eventBus.subscribe('WorkflowCompleted', (event) => {
+  console.log(`Workflow completed in ${event.duration}ms`);
 });
 ```
 
-### Custom Agent Configuration
+### Custom Error Handling
 
 ```typescript
-// Configure individual agents
-const workflow = initMultiAgent({
-  agents: {
-    planner: {
-      maxSteps: 7,
-      planningStrategy: 'strategic'
-    },
-    executor: {
-      maxRetries: 5,
-      screenshotMode: 'on-failure'
-    }
+try {
+  const result = await workflow.executeWorkflow(prompt, url);
+  
+  if (!result.success) {
+    // Handle partial success
+    console.log('Partial results:', result.extractedData);
+    console.log('Failed steps:', result.steps.filter(s => !s.success));
   }
-});
+} catch (error) {
+  // Handle complete failure
+  console.error('Workflow failed:', error);
+} finally {
+  await workflow.cleanup();
+}
 ```
 
 ## 🤝 Contributing
 
-### Development Workflow
+### Development Guidelines
 
-1. **Create Feature Branch**
-   ```bash
-   git checkout -b feature/your-feature
-   ```
+1. **Architecture Principles**
+   - Follow Domain-Driven Design patterns
+   - Maintain clear separation between domain and infrastructure
+   - Use value objects for immutable concepts
+   - Implement aggregates for consistency boundaries
 
-2. **Make Changes**
-   - Follow existing patterns
-   - Add tests for new functionality
-   - Update documentation
+2. **Code Standards**
+   - TypeScript strict mode enabled
+   - Use Result<T> pattern for error handling
+   - Implement proper validation in value objects
+   - Follow existing naming conventions
 
-3. **Test Thoroughly**
-   ```bash
-   npm test
-   npm run lint
-   npm run build
-   ```
+3. **Testing Requirements**
+   - Add unit tests for domain logic
+   - Test value object validation
+   - Mock infrastructure dependencies
+   - Aim for high test coverage
 
-4. **Submit PR**
-   - Clear description of changes
-   - Link related issues
-   - Include test results
-
-### Code Style
-
-- Use TypeScript strict mode
-- Follow existing naming conventions
-- Add JSDoc comments for public APIs
-- Keep functions small and focused
-
-### Testing Requirements
-
-- Unit tests for new agents/services
-- Integration tests for workflows
-- Minimum 80% coverage for new code
+4. **Agent Development**
+   - Keep prompts focused (50-80 lines)
+   - Single responsibility per agent
+   - Use micro-actions for browser interaction
+   - Implement proper error handling
 
 ## 📚 Additional Resources
 
-### Documentation
+### Architecture Documentation
 
-- [Migration Guide](docs/MIGRATION_GUIDE.md) - Detailed migration instructions
-- [Architecture Plan](MULTI_AGENT_ARCHITECTURE_PLAN.md) - System design documentation
-- [Enhancement Plan](MULTI_AGENT_ENHANCEMENT_PLAN.md) - Recent improvements
-- [Bug Fix Plan](EXTRACTION_BUG_FIX_PLAN.md) - Current known issues and fixes
+Located in the `/docs` directory:
+- [Multi-Agent Architecture Plan](docs/MULTI_AGENT_ARCHITECTURE_PLAN.md) - System design
+- [DDD Integration Plan](docs/DDD_INTEGRATION_PLAN.md) - Domain-Driven Design patterns
+- [Workflow Resilience Plan](docs/WORKFLOW_RESILIENCE_PLAN.md) - Error handling strategies
+- [Visual Workflow Implementation](docs/VISUAL_WORKFLOW_IMPLEMENTATION_PLAN.md) - Screenshot integration
+- [Task Executor Separation](docs/TASK_EXECUTOR_SEPARATION_PLAN.md) - Micro-action architecture
 
-### Examples
+### Key Dependencies
 
-- [Amazon Workflow](agent-amazon-multi.ts) - E-commerce automation
-- [Multi-Agent Architecture](docs/MULTI_AGENT_ARCHITECTURE_PLAN.md) - System design
-- [DDD Integration](docs/DDD_INTEGRATION_PLAN.md) - Domain-driven patterns
+| Package | Purpose | Version |
+|---------|---------|---------|
+| **playwright** | Browser automation | ^1.55.0 |
+| **@langchain/openai** | OpenAI LLM integration | ^0.4.4 |
+| **rxjs** | Reactive event handling | ^7.8.1 |
+| **zod** | Schema validation | ^3.24.1 |
+| **uuid** | Unique identifiers | ^11.1.0 |
+| **jsdom** | DOM parsing | ^26.0.0 |
+| **dom-to-semantic-markdown** | HTML to markdown | ^1.3.0 |
+| **class-validator** | Runtime validation | ^0.14.1 |
+| **dotenv** | Environment variables | ^16.4.7 |
 
-### Dependencies
+### Example Implementation
 
-Key dependencies:
-- **Playwright**: Browser automation
-- **LangChain**: LLM integration framework
-- **OpenAI SDK**: AI model access
-- **Zod**: Schema validation
+See [agent-amazon-multi.ts](agent-amazon-multi.ts) for a complete example of:
+- Multi-agent workflow initialization
+- E-commerce automation
+- Data extraction
+- Error handling
 
 ## 📝 License
 
-[License Type] - See LICENSE file for details
+MIT License - See LICENSE file for details
 
 ## 🆘 Support
 
 For issues and questions:
-1. Check [Troubleshooting](#troubleshooting) section
-2. Search existing GitHub issues
-3. Create new issue with reproduction steps
-4. Contact maintainers
+1. Check the [Troubleshooting](#troubleshooting) section
+2. Review architecture documentation in `/docs`
+3. Search existing GitHub issues
+4. Create a new issue with:
+   - Clear problem description
+   - Steps to reproduce
+   - Expected vs actual behavior
+   - Environment details (Node version, OS)
 
 ---
 
-**Note**: This project implements a production-ready multi-agent system with Domain-Driven Design principles, comprehensive error handling, and intelligent workflow orchestration.
-
-Potential support:
-  Certifying, loading, initializing, and unloading a given AI model
-  Calling a model with context
-  Parsing the output from the model
-  Certifying, loading, initializing, and unloading tools
-  Calling a tool
-  Parsing the results from a tool call
-  Storing the results from a tool call into memory
-  Asking the user for input
-  Adding content to a history memory
-  Standard control constructs such as conditionals, sequencing, etc.
+**Note**: This is a production-ready web automation framework implementing a sophisticated multi-agent system with Domain-Driven Design principles, intelligent error recovery, and comprehensive workflow orchestration capabilities.
