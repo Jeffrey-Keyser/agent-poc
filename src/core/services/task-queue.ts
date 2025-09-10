@@ -1,9 +1,9 @@
 import { EventEmitter } from 'events';
-import { StrategicTask } from '../types/agent-types';
+import { Task } from '../entities/task';
 
 export class TaskQueue extends EventEmitter {
-  private queue: StrategicTask[] = [];
-  private priorityQueue: StrategicTask[] = [];
+  private queue: Task[] = [];
+  private priorityQueue: Task[] = [];
   private dependencyMap: Map<string, Set<string>> = new Map();
   private completedTasks: Set<string> = new Set();
 
@@ -11,7 +11,7 @@ export class TaskQueue extends EventEmitter {
     super();
   }
 
-  enqueue(task: StrategicTask): void {
+  enqueue(task: Task): void {
     this.queue.push(task);
     
     // Emit event for monitoring
@@ -23,7 +23,7 @@ export class TaskQueue extends EventEmitter {
     });
   }
 
-  enqueuePriority(task: StrategicTask): void {
+  enqueuePriority(task: Task): void {
     this.priorityQueue.push(task);
     
     // Emit event for monitoring
@@ -35,7 +35,7 @@ export class TaskQueue extends EventEmitter {
     });
   }
 
-  dequeue(): StrategicTask | undefined {
+  dequeue(): Task | undefined {
     const task = this.queue.shift();
     if (task) {
       // Emit event for monitoring  
@@ -91,7 +91,7 @@ export class TaskQueue extends EventEmitter {
     this.completedTasks.clear();
   }
 
-  getAllTasks(): StrategicTask[] {
+  getAllTasks(): Task[] {
     return [...this.priorityQueue, ...this.queue];
   }
 }

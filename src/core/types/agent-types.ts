@@ -1,20 +1,8 @@
 import { MicroActionData, Variable } from '../value-objects';
+import { OpenAIModel } from '@/models/chat-openai';
+import { Task } from '../entities/task';
+import { Plan } from '../entities/plan';
 
-// Strategic level - what the Planner creates
-export interface StrategicTask {
-  id: string;
-  step: number;
-  description: string;
-  expectedOutcome: string;
-}
-
-export interface StrategicPlan {
-  id: string;
-  goal: string;
-  steps: StrategicTask[]; // 3-7 high-level steps
-  createdAt: Date;
-  currentStepIndex: number;
-}
 
 export interface StepResult {
   stepId: string;
@@ -97,14 +85,14 @@ export interface WorkflowEvent {
   type: string;
   timestamp: Date;
   goal?: string;
-  plan?: StrategicPlan;
+  plan?: Plan;
   data?: any;
 }
 
 export interface TaskEvent {
   type: string;
   timestamp: Date;
-  task: StrategicTask;
+  task: Task;
   result?: StepResult;
   duration?: number;
   data?: any;
@@ -115,7 +103,7 @@ export interface WorkflowResult {
   goal: string;
   status: 'success' | 'failure' | 'partial' | 'degraded';
   completedTasks: string[];
-  completedSteps: StrategicTask[];
+  completedSteps: Task[];
   failedTasks: string[];
 
   extractedData?: any;
@@ -131,11 +119,11 @@ export interface MultiAgentConfig {
   headless: boolean;
   variables: Variable[]; 
   models: {
-    planner: string;
-    executor: string;
-    evaluator: string;
-    errorHandler: string;
-    summarizer: string;
+    planner: OpenAIModel;
+    executor: OpenAIModel;
+    evaluator: OpenAIModel;
+    errorHandler: OpenAIModel;
+    summarizer: OpenAIModel;
   };
   maxRetries: number;
   timeout: number;
@@ -143,7 +131,7 @@ export interface MultiAgentConfig {
 
 // Error handling types
 export interface ErrorContext {
-  task: StrategicTask;
+  task: Task;
   result: StepResult;
   retries: number;
   timestamp: Date;
@@ -168,7 +156,7 @@ export interface RetryStrategy {
   shouldRetry: boolean;
   shouldReplan: boolean;
   delayMs: number;
-  modifications?: Partial<StrategicTask>;
+  modifications?: Partial<Task>;
   reason: string;
 }
 
@@ -187,6 +175,6 @@ export interface BrowserState {
 export interface InteractionContext {
   element: DOMElement;
   pageState: PageState;
-  intent: StrategicTask;
+  intent: Task;
   previousActions: MicroActionData[];
 }

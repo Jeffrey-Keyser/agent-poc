@@ -4,9 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a sophisticated web automation framework featuring dual architectures:
-- **Legacy System**: Monolithic agent with comprehensive 276-line prompt (stable, battle-tested)
-- **Multi-Agent System**: Modern DDD-based architecture with specialized agents for intelligent browser automation
+This is a sophisticated web automation framework featuring a modern multi-agent architecture with specialized agents for intelligent browser automation.
 
 The codebase follows Domain-Driven Design (DDD) principles with clear separation of concerns, event-driven architecture, and workflow orchestration capabilities.
 
@@ -15,41 +13,56 @@ The codebase follows Domain-Driven Design (DDD) principles with clear separation
 ### Build and Development
 ```bash
 npm run build              # Compile TypeScript to JavaScript
-npm run dev               # Run in development mode with watch
-npm run clean             # Clean build artifacts
+npm run build:run         # Build and run the compiled JavaScript
+npm run dev               # Run in development mode with watch (ts-node --watch)
+npm run clean             # Clean build artifacts (rm -rf dist)
 ```
 
 ### Running Agents
 ```bash
-# Multi-agent system (recommended)
+# Multi-agent system
 npm run start:amazon-multi    # Amazon automation with multi-agent
-npm run start:github          # GitHub automation (placeholder)
-
-# Legacy system
-npm start                     # Run default agent-poc.ts
-npm run start:amazon         # Amazon automation (legacy)
-npm run start:grubhub        # GrubHub automation
-npm run start:openator       # Openator automation
+npm start                     # Run main entry point (src/index.ts)
+npm run dev                   # Development mode with watch
 ```
 
 ### Testing
 ```bash
-npm test                      # Run test suite (currently placeholder)
-# Tests use Jest framework, located in __tests__ directories
-# Test patterns: *.test.ts, *.spec.ts
+npm test                      # Run Jest test suite
+npm test -- path/to/test.ts  # Run specific test file
+npm test -- --coverage       # Run tests with coverage report
+
+# Test configuration:
+# - Framework: Jest with ts-jest
+# - Test patterns: **/__tests__/**/*.ts, **/?(*.)+(spec|test).ts
+# - Coverage threshold: Not currently enforced
 ```
 
 ### Browser Setup
 ```bash
 npm run install:browsers      # Install Playwright browsers
+npm run postinstall          # Auto-runs after npm install (installs Chromium)
 npx playwright install chromium  # Install Chromium specifically
+```
+
+### Environment Setup
+```bash
+# 1. Copy the example environment file
+cp .env.example .env
+
+# 2. Add your OpenAI API key to .env
+# Required: OPENAI_API_KEY=sk-proj-...
+
+# 3. Optional debug logging
+# DEBUG=openai-agents:*  # Enable all debug logs
+# DEBUG=openai-agents:core  # Core execution logs only
 ```
 
 ## Architecture
 
 ### Domain-Driven Design Structure
 
-The codebase implements DDD with the following key components:
+The codebase implements DDD with the following key components. **Note: StrategicTask to Task Entity migration is now complete** - all services use proper DDD Task entities instead of legacy StrategicTask interfaces.
 
 #### Core Domain (`src/core/`)
 - **Aggregates** (`aggregates/`): workflow-aggregate, execution-aggregate
@@ -102,17 +115,11 @@ Events are handled through the EventBus with specialized handlers for logging, m
 
 ### Multi-Agent System
 - `agent-amazon-multi.ts` - Amazon automation with extraction
-- `agent-github-multi.ts` - GitHub automation with authentication
 - `src/init-multi-agent.ts` - Multi-agent system initializer
-
-### Legacy System
-- `agent-amazon-poc.ts` - Amazon automation (stable)
-- `agent-github-poc.ts` - GitHub automation
-- `src/init-agents-poc.ts` - Legacy system initializer
+- `src/index.ts` - Main application entry point
 
 ### Development Entry Points
 - `src/init-agents.ts` - Unified initializer with feature flags
-- `examples/deployment-examples.ts` - Configuration examples
 
 ## Key Patterns and Conventions
 
@@ -126,7 +133,7 @@ new Variable({ name: 'password', value: 'secret', isSecret: true })
 ### Workflow Execution
 ```typescript
 // Multi-agent system
-const workflow = initMultiAgent({ llm, headless: false, variables });
+const workflow = initMultiAgent({ apiKey, headless: false, variables });
 const result = await workflow.executeWorkflow(prompt, url);
 await workflow.cleanup();
 ```
@@ -154,17 +161,22 @@ The system implements intelligent error recovery through:
 ## Dependencies
 
 ### Core Dependencies
-- **playwright**: Browser automation
-- **langchain/openai**: LLM integration
-- **zod**: Schema validation
-- **rxjs**: Reactive programming for event handling
-- **uuid**: Identifier generation
-- **class-validator**: Runtime validation
+- **playwright**: Browser automation (^1.55.0)
+- **langchain/openai**: LLM integration (^0.4.4)
+- **zod**: Schema validation (^3.24.1)
+- **rxjs**: Reactive programming for event handling (^7.8.1)
+- **uuid**: Identifier generation (^11.1.0)
+- **class-validator**: Runtime validation (^0.14.1)
+- **dotenv**: Environment variable management (^16.4.7)
+- **jsdom**: DOM parsing and manipulation (^26.0.0)
+- **dom-to-semantic-markdown**: HTML to markdown conversion (^1.3.0)
+- **socket.io**: Real-time communication (^4.8.1)
 
 ### Development
-- **typescript**: Type safety
-- **ts-node**: Direct TypeScript execution
-- **jest** (via config): Testing framework
+- **typescript**: Type safety (^5.5.4)
+- **ts-node**: Direct TypeScript execution (^10.9.2)
+- **jest** (via config): Testing framework with ts-jest preset
+- **Node.js**: Requires >=18.0.0
 
 ## Important Implementation Notes
 
@@ -178,11 +190,32 @@ The system implements intelligent error recovery through:
 8. **Memory System**: Learns from successes and failures for optimization
 9. **Variable Interpolation**: Secure handling of sensitive data in prompts
 10. **Screenshot Integration**: Visual understanding capability for agents
+11. **Task Entity Migration**: All services now use Task entities instead of legacy StrategicTask interfaces - migration completed in Phases 1-3
 
-## Migration Path
+## Integration Patterns
 
-When migrating from legacy to multi-agent:
-1. Use `initMultiAgent()` instead of `initAgentsPoc()`
-2. Update execution calls from `agent.start()` to `workflow.executeWorkflow()`
-3. Add cleanup calls: `await workflow.cleanup()`
-4. Leverage feature flags in `src/init-agents.ts` for gradual migration
+For implementing new automation workflows:
+1. Use `initMultiAgent()` to initialize the workflow system
+2. Execute workflows with `workflow.executeWorkflow(prompt, url)`
+3. Always call cleanup: `await workflow.cleanup()`
+4. Leverage domain events for monitoring and logging
+5. Use proper DDD entities (Task, Plan, Step) for type safety
+
+## TypeScript Configuration
+
+The project uses TypeScript with the following key settings:
+- **Target**: ES2020
+- **Module**: CommonJS
+- **Strict Mode**: Enabled
+- **Decorators**: Enabled (experimentalDecorators, emitDecoratorMetadata)
+- **Source Maps**: Enabled
+- **Output Directory**: `dist/`
+- **Path Aliases**: `@/*` maps to `src/*`
+
+## Project Status Notes
+
+- **Test Suite**: Comprehensive DDD testing with Jest
+- **Active Development**: Multi-agent system enhancements and workflow optimization
+- **Production Ready**: Multi-agent system with Domain-Driven Design architecture
+- **Architecture**: Complete DDD implementation with aggregates, entities, and value objects
+- **Event System**: Full event-driven architecture for workflow coordination

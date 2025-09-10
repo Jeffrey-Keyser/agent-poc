@@ -27,7 +27,6 @@ export interface SummarizerConfig {
  */
 export class TaskSummarizerAgent implements ITaskSummarizer {
   public readonly name = 'TaskSummarizer';
-  public readonly model: string;
   public readonly maxRetries: number;
   
   private llm: LLM;
@@ -35,7 +34,6 @@ export class TaskSummarizerAgent implements ITaskSummarizer {
   
   constructor(llm: LLM, config: SummarizerConfig) {
     this.llm = llm;
-    this.model = config.model;
     this.maxRetries = config.maxRetries || 3;
     this.config = {
       includeRecommendations: true,

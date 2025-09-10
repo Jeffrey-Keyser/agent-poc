@@ -1,16 +1,17 @@
 import { EnhancedEventBusInterface } from '../interfaces/event-bus.interface';
 import { AgentReporter } from '../interfaces/agent-reporter.interface';
-import { StrategicTask, StepResult, WorkflowResult } from '../types/agent-types';
+import { StepResult, WorkflowResult } from '../types/agent-types';
+import { Task } from '../entities/task';
 
 export interface WorkflowEvent {
   goal?: string;
-  plan?: { tasks: StrategicTask[] };
+  plan?: { tasks: Task[] };
   error?: string;
   timestamp: Date;
 }
 
 export interface TaskEvent {
-  task: StrategicTask;
+  task: Task;
   result?: StepResult;
   duration?: number;
   microActions?: any[];
@@ -18,14 +19,14 @@ export interface TaskEvent {
 }
 
 export interface StepEvent {
-  step: StrategicTask;
+  step: Task;
   result?: StepResult;
   microActions?: any[];
   timestamp: Date;
 }
 
 export interface QueueEvent {
-  task: StrategicTask;
+  task: Task;
   queueSize: number;
   readyCount: number;
   blockedCount: number;
@@ -33,7 +34,7 @@ export interface QueueEvent {
 }
 
 export interface BlockedTaskEvent {
-  task: StrategicTask;
+  task: Task;
   dependencies: string[];
   unmetDependencies: string[];
   blockedCount: number;
@@ -161,7 +162,7 @@ export class WorkflowMonitor {
   }
 
   private onStepStart(event: StepEvent): void {
-    this.reporter.log(`⚡ Executing step: ${event.step.description}`);
+    this.reporter.log(`⚡ Executing step: ${event.step.getDescription()}`);
   }
 
   private onStepComplete(event: StepEvent): void {
@@ -170,7 +171,7 @@ export class WorkflowMonitor {
     if (event.result?.status === 'success') {
       this.metrics.successfulSteps++;
       const duration = event.result.duration || 0;
-      this.reporter.log(`✅ Step completed: ${event.step.description} (${this.formatDuration(duration)})`);
+      this.reporter.log(`✅ Step completed: ${event.step.getDescription()} (${this.formatDuration(duration)})`);
       
       if (event.microActions && event.microActions.length > 0) {
         this.reporter.log(`🔧 Executed ${event.microActions.length} micro-actions`);
@@ -186,7 +187,7 @@ export class WorkflowMonitor {
     this.metrics.errorCount++;
     
     const duration = event.result?.duration || 0;
-    this.reporter.log(`❌ Step failed: ${event.step.description} (${this.formatDuration(duration)})`);
+    this.reporter.log(`❌ Step failed: ${event.step.getDescription()} (${this.formatDuration(duration)})`);
     
     if (event.result?.errorReason) {
       this.reporter.log(`💡 Reason: ${event.result.errorReason}`);
@@ -194,21 +195,21 @@ export class WorkflowMonitor {
   }
 
   private onTaskStart(event: TaskEvent): void {
-    this.reporter.log(`🔄 Starting task execution: ${event.task.description}`);
+    this.reporter.log(`🔄 Starting task execution: ${event.task.getDescription()}`);
   }
 
   private onTaskComplete(event: TaskEvent): void {
     const status = event.result?.status === 'success' ? '✅' : '❌';
     const duration = event.result?.duration ? this.formatDuration(event.result.duration) : 'unknown';
     
-    this.reporter.log(`${status} Task: ${event.task.description} (${duration})`);
+    this.reporter.log(`${status} Task: ${event.task.getDescription()} (${duration})`);
   }
 
   private onTaskFailed(event: TaskEvent): void {
     this.metrics.errorCount++;
     const duration = event.result?.duration ? this.formatDuration(event.result.duration) : 'unknown';
     
-    this.reporter.log(`❌ Task failed: ${event.task.description} (${duration})`);
+    this.reporter.log(`❌ Task failed: ${event.task.getDescription()} (${duration})`);
     if (event.result?.errorReason) {
       this.reporter.log(`💡 Failure reason: ${event.result.errorReason}`);
     }
@@ -228,19 +229,19 @@ export class WorkflowMonitor {
       event.queueSize
     );
     
-    this.reporter.log(`📥 Task enqueued: ${event.task.description} (Queue: ${event.queueSize}, Ready: ${event.readyCount}, Blocked: ${event.blockedCount})`);
+    this.reporter.log(`📥 Task enqueued: ${event.task.getDescription()} (Queue: ${event.queueSize}, Ready: ${event.readyCount}, Blocked: ${event.blockedCount})`);
   }
   
-  private onTaskDequeued(event: { task: StrategicTask; remainingSize: number }): void {
+  private onTaskDequeued(event: { task: Task; remainingSize: number }): void {
     this.queueMetrics.totalDequeued++;
     
-    this.reporter.log(`📤 Task dequeued: ${event.task.description} (Remaining: ${event.remainingSize})`);
+    this.reporter.log(`📤 Task dequeued: ${event.task.getDescription()} (Remaining: ${event.remainingSize})`);
   }
 
   private onTaskBlocked(event: BlockedTaskEvent): void {
     this.queueMetrics.totalBlocked++;
     
-    this.reporter.log(`🚫 Task blocked: ${event.task.description} (Dependencies: ${event.dependencies.join(', ')})`);
+    this.reporter.log(`🚫 Task blocked: ${event.task.getDescription()} (Dependencies: ${event.dependencies.join(', ')})`);
   }
   
   private onQueueTaskCompleted(event: { taskId: string; completedCount: number }): void {

@@ -1,15 +1,14 @@
 // Import types from agent-types.ts
 import type { 
-  StrategicTask, 
   ActionResult, 
   PageState,
   StepResult
 } from '../types/agent-types';
 import { MicroActionData } from '../value-objects/task';
+import { Task } from '../entities/task';
 
 export interface IAgent<TInput, TOutput> {
   name: string;
-  model: string;
   maxRetries: number;
   
   execute(input: TInput): Promise<TOutput>;
@@ -26,7 +25,7 @@ export interface PlannerInput {
 }
 
 export interface PlannerOutput {
-  strategy: StrategicTask[];
+  strategy: Task[];
   id: string;
   goal: string;
   createdAt: Date;
@@ -46,7 +45,7 @@ export interface ExecutorOutput {
 }
 
 export interface EvaluatorInput {
-  step: StrategicTask;
+  step: Task;
   beforeState: PageState;
   afterState: PageState;
   microActions: MicroActionData[];
@@ -70,8 +69,8 @@ export interface EvaluatorOutput {
 
 export interface ReplanContext {
   originalGoal: string;
-  completedSteps: StrategicTask[];
-  failedStep: StrategicTask;
+  completedSteps: Task[];
+  failedStep: Task;
   failureReason: string;
   currentState: PageState;
   accumulatedData?: Record<string, any>;
@@ -99,7 +98,7 @@ export interface IErrorHandler {
 
 export interface SummarizerInput {
   goal: string;                           // Original workflow goal
-  plan: StrategicTask[];                  // The planned strategy from StrategicPlan.steps
+  plan: any[];                            // The planned strategy (compatible structure)
   completedSteps: StepResult[];           // Array of step results (from Map values)
   extractedData: Record<string, any>;     // Raw extracted data collected during workflow
   totalDuration: number;                  // Total time in milliseconds

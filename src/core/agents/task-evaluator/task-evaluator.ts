@@ -22,13 +22,11 @@ import { TASK_EVALUATOR_PROMPT } from './task-evaluator.prompt';
  */
 export class TaskEvaluatorAgent implements ITaskEvaluator {
   public readonly name = 'TaskEvaluator';
-  public readonly model: string;
   public readonly maxRetries: number;
-  
   private llm: LLM;
+
   constructor(llm: LLM, config: EvaluatorConfig) {
     this.llm = llm;
-    this.model = config.model;
     this.maxRetries = config.maxRetries || 3;
   }
 
@@ -82,7 +80,7 @@ export class TaskEvaluatorAgent implements ITaskEvaluator {
     const evaluation = await this.llm.invokeAndParse(messages, parser);
     
     const output: EvaluatorOutput = {
-      stepId: input.step.id,
+      stepId: input.step.getId().toString(),
       success: evaluation.success,
       confidence: this.validateConfidence(evaluation.confidence),
       evidence: evaluation.evidence || 'No evidence provided',
@@ -110,8 +108,8 @@ export class TaskEvaluatorAgent implements ITaskEvaluator {
     return !!(
       input &&
       input.step &&
-      typeof input.step.id === 'string' &&
-      typeof input.step.expectedOutcome === 'string' &&
+      input.step.getId() &&
+      input.step.getDescription() &&
       input.beforeState &&
       input.afterState &&
       Array.isArray(input.microActions) &&
@@ -160,8 +158,8 @@ Extracted Data Present: ${afterState.extractedData && Object.keys(afterState.ext
 STRATEGIC TASK EVALUATION:
 
 TASK DETAILS:
-- Description: ${step.description}
-- Expected Outcome: ${step.expectedOutcome}
+- Description: ${step.getDescription()}
+- Expected Outcome: ${step.getDescription()} completion
 ${flexibleCriteria}
 ${extractionGuidance}
 EXECUTION RESULTS:

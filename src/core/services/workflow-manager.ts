@@ -1,6 +1,4 @@
 import { 
-  StrategicTask,
-  StrategicPlan,
   StepResult,
   PageState,
   WorkflowResult,
@@ -91,7 +89,6 @@ export class WorkflowManager {
 
     // TODO: Does goal make sense as an entity, value object?
   private currentGoal: string = '';
-  private currentStrategy: StrategicPlan | null = null;
   private completedSteps: Map<string, StepResult> = new Map();
   private startTime: Date | null = null;
   private stateManager: StateManager;
@@ -177,10 +174,9 @@ export class WorkflowManager {
       await this.initializePlan(goal, startUrl);
       await this.setupAggregates();
 
-      this.currentStrategy = this.createStrategyFromPlan(this.currentGoal, this.currentPlan!);
-      const successfullyCompletedSteps = await this.executeSteps();
+      const successfullyCompletedTasks = await this.executeSteps();
       
-      await this.finalizeWorkflow(successfullyCompletedSteps);
+      await this.finalizeWorkflow(successfullyCompletedTasks);
       
       await this.publishEntityEvents();
       return await this.buildWorkflowResult();
@@ -280,37 +276,17 @@ export class WorkflowManager {
     }
   }
 
-  /**
-   * Create strategic plan from domain plan
-   */
-  private createStrategyFromPlan(goal: string, plan: Plan): StrategicPlan {
-    const strategy = {
-      id: `domain-strategy-${Date.now()}`,
-      goal,
-      steps: plan.getSteps().map((step, index) => ({
-        id: step.getId().toString(),
-        step: index + 1,
-        description: step.getDescription(),
-        expectedOutcome: step.getDescription()
-      })),
-      createdAt: new Date(),
-      currentStepIndex: 0
-    };
-    
-    this.reporter.log(`📋 Strategic plan created with ${plan.getSteps().length} steps`);
-    return strategy;
-  }
 
   /**
    * Execute all workflow steps
    */
-  private async executeSteps(): Promise<StrategicTask[]> {
-    const successfullyCompletedSteps: StrategicTask[] = [];
+  private async executeSteps(): Promise<Task[]> {
+    const successfullyCompletedTasks: Task[] = [];
     for (const step of this.currentPlan!.getSteps()) {
       // TODO: Update this to utilize the aggregate
       
       const stepExecutionResult = await this.executeStep(step);
-      successfullyCompletedSteps.push(...stepExecutionResult.successfulTasks);
+      successfullyCompletedTasks.push(...stepExecutionResult.successfulTasks);
       
       const continueExecution = await this.processStepCompletion(
         step,
@@ -323,7 +299,7 @@ export class WorkflowManager {
       }
     }
     
-    return successfullyCompletedSteps;
+    return successfullyCompletedTasks;
   }
 
   /**
@@ -332,7 +308,7 @@ export class WorkflowManager {
   private async executeStep(step: Step): Promise<{
     stepSuccess: boolean;
     taskResults: TaskResult[];
-    successfulTasks: StrategicTask[];
+    successfulTasks: Task[];
   }> {
     this.reporter.log(`⚡ Executing step: ${step.getDescription()}`);
     
@@ -344,7 +320,7 @@ export class WorkflowManager {
     }
     
     const stepTaskResults: TaskResult[] = [];
-    const successfulTasks: StrategicTask[] = [];
+    const successfulTasks: Task[] = [];
     
     // TODO: Convert to tasks
     const placeholderTask = Task.create(TaskId.generate(), Intent.click(), step.description, Priority.low(), 1, 5000);
@@ -354,8 +330,8 @@ export class WorkflowManager {
     const taskExecutionResult = await this.executeTask(taskResult, step);
     stepTaskResults.push(taskExecutionResult.result);
     
-    if (taskExecutionResult.strategicTask) {
-      successfulTasks.push(taskExecutionResult.strategicTask);
+    if (taskExecutionResult.task) {
+      successfulTasks.push(taskExecutionResult.task);
     }
     
     // Determine step success
@@ -382,7 +358,7 @@ export class WorkflowManager {
    */
   private async executeTask(task: Task, _step: Step): Promise<{
     result: TaskResult;
-    strategicTask?: StrategicTask | undefined;
+    task?: Task | undefined;
     shouldBreak: boolean;
   }> {
     // TODO: Setup this.
@@ -436,9 +412,9 @@ export class WorkflowManager {
       
       // await this.recordTaskExecution(task, taskResult, step);
       
-      let strategicTask: StrategicTask | undefined;
+      let completedTask: Task | undefined;
       if (taskResult.success) {
-        strategicTask = this.createStrategicTaskFromTask(task);
+        completedTask = task;
         this.reporter.log(`✅ Task completed: ${task.getDescription()}`);
         
         await this.processExtractedDataFromEvidence(executionEvidence);
@@ -451,7 +427,7 @@ export class WorkflowManager {
       // Check for early exit or replanning  
       const shouldBreak = await this.checkPostTaskConditions(taskResult);
       
-      if (taskResult.success && strategicTask) {
+      if (taskResult.success && completedTask) {
         const stepResult: StepResult = {
           stepId: task.getId().toString(),
           success: true,
@@ -466,7 +442,7 @@ export class WorkflowManager {
         this.completedSteps.set(task.getId().toString(), stepResult);
       }
       
-      return { result: taskResult, strategicTask, shouldBreak };
+      return { result: taskResult, task: completedTask, shouldBreak };
       
     } catch (error) {
       const errorResult = {
@@ -515,17 +491,6 @@ export class WorkflowManager {
     }
   }
 
-  /**
-   * Create strategic task from domain task
-   */
-  private createStrategicTaskFromTask(task: Task): StrategicTask {
-    return {
-      id: task.getId().toString(),
-      step: 1,
-      description: task.getDescription(),
-      expectedOutcome: task.getDescription()
-    };
-  }
 
   /**
    * Update execution context with current URL
@@ -695,7 +660,7 @@ export class WorkflowManager {
   /**
    * Finalize workflow execution status
    */
-  private async finalizeWorkflow(successfullyCompletedSteps: StrategicTask[]): Promise<void> {
+  private async finalizeWorkflow(successfullyCompletedTasks: Task[]): Promise<void> {
     if (!this.workflowAggregate) {
       this.reporter.log('⚠️ No workflow aggregate to finalize');
       return;
@@ -717,7 +682,7 @@ export class WorkflowManager {
         this.reporter.log(`⚠️ Failed to mark workflow as complete: ${completionResult.getError()}`);
       }
     } else {
-      await this.handlePartialCompletion(successfullyCompletedSteps, allExtractedData);
+      await this.handlePartialCompletion(successfullyCompletedTasks, allExtractedData);
     }
     
     // Update workflow in repository
@@ -730,10 +695,10 @@ export class WorkflowManager {
    * Handle partial workflow completion
    */
   private async handlePartialCompletion(
-    successfullyCompletedSteps: StrategicTask[],
+    successfullyCompletedTasks: Task[],
     allExtractedData: Record<string, any>
   ): Promise<void> {
-    const successfulSteps = successfullyCompletedSteps.length;
+    const successfulSteps = successfullyCompletedTasks.length;
     const totalSteps = this.currentPlan?.getSteps().length || 0;
     const partialCompletionPercentage = totalSteps > 0 ? (successfulSteps / totalSteps) * 100 : 0;
     
@@ -912,7 +877,7 @@ export class WorkflowManager {
         workflowStatus = 'degraded';
       }
     } else {
-      const totalSteps = this.currentStrategy?.steps.length || 0;
+      const totalSteps = this.currentPlan?.getSteps().length || 0;
       const completedCount = Array.from(this.completedSteps.values())
         .filter(r => r.success || r.status === 'partial').length;
       completionPercentage = totalSteps > 0 ? (completedCount / totalSteps) * 100 : 0;
@@ -925,7 +890,7 @@ export class WorkflowManager {
         workflowStatus = 'degraded';
       }
       
-      workflowGoal = this.currentStrategy?.goal || '';
+      workflowGoal = this.currentGoal || '';
     }
     
     // Get all accumulated data
@@ -937,12 +902,7 @@ export class WorkflowManager {
       goal: workflowGoal,
       status: workflowStatus,
       completedTasks: Array.from(this.completedSteps.keys()),
-      completedSteps: Array.from(this.completedSteps.values()).map(result => ({
-        id: result.stepId,
-        step: 1,
-        description: `Completed step: ${result.stepId}`,
-        expectedOutcome: 'completed'
-      })),
+      completedSteps: [], // TODO: Collect actual Task entities that were completed
       failedTasks: Array.from(this.completedSteps.values()).filter(r => !r.success).map(r => r.stepId),
 
       extractedData: allExtractedData,
@@ -956,8 +916,13 @@ export class WorkflowManager {
     if (this.summarizer) {
       try {
         const summarizerInput: SummarizerInput = {
-          goal: this.currentStrategy?.goal || '',
-          plan: this.currentStrategy?.steps || [],
+          goal: this.currentGoal || '',
+          plan: this.currentPlan?.getSteps().map(step => ({
+            id: step.getId().toString(),
+            step: step.getOrder(),
+            description: step.getDescription(),
+            expectedOutcome: step.getDescription()
+          })) || [],
           completedSteps: Array.from(this.completedSteps.values()),
           extractedData: allExtractedData,
           totalDuration: duration,
@@ -983,7 +948,7 @@ export class WorkflowManager {
   }
 
   private calculateCompletionPercentage(): number {
-    const totalSteps = this.currentStrategy?.steps.length || 0;
+    const totalSteps = this.currentPlan?.getSteps().length || 0;
     const completedCount = Array.from(this.completedSteps.values())
       .filter(r => r.success || r.status === 'partial').length;
     return totalSteps > 0 ? (completedCount / totalSteps) * 100 : 0;

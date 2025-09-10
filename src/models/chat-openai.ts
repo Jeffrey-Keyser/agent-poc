@@ -3,12 +3,13 @@ import { BaseMessage } from '@langchain/core/messages';
 import { JsonOutputParser } from '@langchain/core/output_parsers';
 import { LLM } from '@/core/types';
 
+export type OpenAIModel = 'gpt-5' | 'gpt-5-mini' | 'gpt-5-nano';
 export type ChatOpenAIConfig = {
   /**
    * The model to use.
    * @default gpt-5-nano
    */
-  model?: 'gpt-5-mini' | 'gpt-5-nano';
+  model?: OpenAIModel;
   /**
    * The maximum number of retries.
    * This is usefull when you have a low quota such as Tier 1 or 2.

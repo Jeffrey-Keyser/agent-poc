@@ -1,9 +1,10 @@
 import { LLM } from '../../interfaces/llm.interface';
 import { ITaskPlanner, PlannerInput, PlannerOutput, ReplanContext } from '../../interfaces/agent.interface';
-import { StrategicTask } from '../../types/agent-types';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { JsonOutputParser } from '@langchain/core/output_parsers';
 import { TASK_PLANNER_PROMPT } from './task-planner.prompt';
+import { Task } from '../../entities/task';
+import { TaskId, Intent, Priority } from '../../value-objects';
 
 /**
  * TaskPlannerAgent - Creates high-level strategic plans for user goals
@@ -19,11 +20,9 @@ import { TASK_PLANNER_PROMPT } from './task-planner.prompt';
  */
 export class TaskPlannerAgent implements ITaskPlanner {
   public readonly name = 'TaskPlanner';
-  public readonly model: string;
   public readonly maxRetries: number;
   
   constructor(private readonly llm: LLM) {
-    this.model = 'gpt-5-nano';
     this.maxRetries =  3;
   }
 
@@ -62,13 +61,13 @@ export class TaskPlannerAgent implements ITaskPlanner {
     const response = await this.llm.invokeAndParse(messages, parser);
     console.log('[TaskPlanner] Raw LLM response:', JSON.stringify(response, null, 2));
     
-    const strategicTasks = this.parseStrategicTasks(response.strategy);
-    console.log('[TaskPlanner] Parsed strategic tasks:', JSON.stringify(strategicTasks, null, 2));
+    const taskEntities = this.parseTaskEntities(response.strategy);
+    console.log('[TaskPlanner] Parsed task entities:', JSON.stringify(taskEntities.map(t => t.getSummary()), null, 2));
     
     const output: PlannerOutput = {
       id: this.generateId(),
       goal: input.goal,
-      strategy: strategicTasks,
+      strategy: taskEntities,
       createdAt: new Date(),
       currentStepIndex: 0
     };
@@ -92,12 +91,12 @@ export class TaskPlannerAgent implements ITaskPlanner {
     const parser = new JsonOutputParser<{ strategy: any[] }>();
     const response = await this.llm.invokeAndParse([systemMessage, humanMessage], parser);
     
-    const strategicTasks = this.parseStrategicTasks(response.strategy);
+    const taskEntities = this.parseTaskEntities(response.strategy);
     
     return {
       id: this.generateId(),
       goal: context.originalGoal,
-      strategy: strategicTasks,
+      strategy: taskEntities,
       createdAt: new Date(),
       currentStepIndex: 0
     };
@@ -121,7 +120,7 @@ export class TaskPlannerAgent implements ITaskPlanner {
       Array.isArray(output.strategy) &&
       output.strategy.length >= 1 &&
       output.strategy.length <= 7 &&
-      output.strategy.every(this.validateStrategicTask) &&
+      output.strategy.every(this.validateTaskEntity) &&
       output.createdAt instanceof Date &&
       typeof output.currentStepIndex === 'number'
     );
@@ -214,40 +213,71 @@ Your response must be valid JSON in the format specified in the system prompt.
     `;
   }
 
-  private parseStrategicTasks(strategy: any[]): StrategicTask[] {
+  private parseTaskEntities(strategy: any[]): Task[] {
     return strategy.map((step, index) => {
       const stepNumber = step.step || (index + 1);
       const description = step.description || `Step ${stepNumber}`;
       
-      return {
-        id: `task-${this.generateId()}-${index + 1}`,
-        step: stepNumber,
-        description: description,
-        expectedOutcome: step.expectedOutcome || step.expectedResult || `Complete step: ${description}`
-      };
+      // Create Task entity using proper DDD value objects
+      const taskId = TaskId.generate();
+      const intent = Intent.click(); // Default intent, could be inferred from description
+      const priority = Priority.medium(); // Default priority
+      
+      const taskResult = Task.create(
+        taskId,
+        intent,
+        description,
+        priority,
+        3, // maxRetries
+        30000 // timeoutMs
+      );
+      
+      if (taskResult.isFailure()) {
+        console.warn(`[TaskPlanner] Failed to create task entity: ${taskResult.getError()}`);
+        // Fallback - create a simpler task
+        return Task.create(
+          TaskId.generate(),
+          Intent.click(),
+          `Fallback: ${description}`,
+          Priority.low(),
+          1,
+          10000
+        ).getValue();
+      }
+      
+      return taskResult.getValue();
     });
   }
 
-  private validateStrategicTask(task: StrategicTask): boolean {
+  private validateTaskEntity(task: Task): boolean {
     if (!task) {
       console.warn('[TaskPlanner] Validation failed: task is null/undefined');
       return false;
     }
     
-    const validations = [
-      { check: typeof task.id === 'string', field: 'id', value: task.id },
-      { check: typeof task.description === 'string', field: 'description', value: task.description },
-      { check: typeof task.expectedOutcome === 'string', field: 'expectedOutcome', value: task.expectedOutcome },
-    ];
-    
-    for (const validation of validations) {
-      if (!validation.check) {
-        console.warn(`[TaskPlanner] Validation failed for field '${validation.field}':`, validation.value);
-        return false;
+    try {
+      // Use the task's built-in validation
+      task.validateInvariants();
+      
+      // Additional checks for planning requirements
+      const validations = [
+        { check: task.getId() !== null, field: 'id', value: task.getId().toString() },
+        { check: task.getDescription().trim().length > 0, field: 'description', value: task.getDescription() },
+        { check: task.getIntent() !== null, field: 'intent', value: task.getIntent().toString() },
+      ];
+      
+      for (const validation of validations) {
+        if (!validation.check) {
+          console.warn(`[TaskPlanner] Validation failed for field '${validation.field}':`, validation.value);
+          return false;
+        }
       }
+      
+      return true;
+    } catch (error) {
+      console.warn('[TaskPlanner] Task validation failed:', error);
+      return false;
     }
-    
-    return true;
   }
 
   private generateId(): string {

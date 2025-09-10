@@ -1,7 +1,7 @@
 import { Plan, Step, Task, Result } from '../entities';
 import { PlanId, WorkflowId, StepId, Confidence } from '../value-objects';
 import { StateManager } from '../services/state-manager';
-import { PageState, StrategicTask } from '../types/agent-types';
+import { PageState } from '../types/agent-types';
 import { LLM } from '../interfaces/llm.interface';
 import { MemoryService } from '../services/memory-service';
 import { TaskPlannerAgent } from '../agents/task-planner';
@@ -197,18 +197,18 @@ export class AITaskPlanningService implements PlanningService {
     }
   }
 
-  private convertAgentOutputToPlan(strategicSteps: StrategicTask[], _goal: string, workflowId?: WorkflowId): Result<Plan> {
+  private convertAgentOutputToPlan(taskEntities: Task[], _goal: string, workflowId?: WorkflowId): Result<Plan> {
     try {
       const planId = PlanId.generate();
       const planWorkflowId = workflowId || WorkflowId.generate();
       const steps: Step[] = [];
 
-      for (let i = 0; i < strategicSteps.length; i++) {
-        const strategicStep = strategicSteps[i];
+      for (let i = 0; i < taskEntities.length; i++) {
+        const task = taskEntities[i];
         
         const stepResult = Step.create(
           StepId.generate(),
-          strategicStep.description,
+          task.getDescription(),
           i + 1,
           Confidence.create(80).getValue()
         );
@@ -218,6 +218,8 @@ export class AITaskPlanningService implements PlanningService {
         }
 
         const step = stepResult.getValue();
+        // Add the task to the step
+        step.addTask(task);
         steps.push(step);
       }
 

@@ -32,11 +32,11 @@ async function main() {
     viewport: { width: 1920, height: 1080 },
     variables,
     models: {
-      planner: 'gpt-5-mini',
-      executor: 'gpt-5-mini', 
-      evaluator: 'gpt-5-mini', 
-      errorHandler: 'gpt-5-mini',
-      summarizer: 'gpt-5-mini'
+      planner: 'gpt-5-nano',
+      executor: 'gpt-5-nano', 
+      evaluator: 'gpt-5-nano', 
+      errorHandler: 'gpt-5-nano',
+      summarizer: 'gpt-5-nano'
     },
     maxRetries: 3,
     timeout: 300000,
@@ -48,7 +48,7 @@ async function main() {
     console.log('🚀 Starting Amazon multi-agent workflow...');
     
     const result = await workflow.execute(
-      'Can you find a collection of large size grey and black fruit of the loom shirts for men and place them into my cart. Return the product URL that you placed into my cart.',
+      'Can you find a collection of large size grey and black fruit of the loom shirts for men and place them into my cart.',
       'https://amazon.com'    
     );
     

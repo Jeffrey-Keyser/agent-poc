@@ -85,8 +85,8 @@ OUTPUT FORMAT:
     return `
 FAILURE ANALYSIS:
 
-Task: ${context.task.description}
-Expected: ${context.task.expectedOutcome}
+Task: ${context.task.getDescription()}
+Expected: ${context.task.getDescription()} completion
 
 Failure Details:
 - Status: ${context.result.status}

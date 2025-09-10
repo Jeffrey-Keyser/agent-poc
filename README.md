@@ -1,6 +1,6 @@
 # Agents - Web Automation Framework
 
-A powerful TypeScript-based web automation framework featuring both a legacy monolithic system and a modern multi-agent architecture for intelligent browser automation.
+A powerful TypeScript-based web automation framework featuring a modern multi-agent architecture for intelligent browser automation.
 
 ## 📋 Table of Contents
 
@@ -18,21 +18,16 @@ A powerful TypeScript-based web automation framework featuring both a legacy mon
 
 ## 🎯 Project Overview
 
-This repository contains two distinct automation systems:
+This repository contains a sophisticated multi-agent automation system:
 
-### 1. **Legacy System (agents-poc)** 
-- Single monolithic agent with a comprehensive 276-line prompt
-- Battle-tested and stable
-- All logic in one place
-- Simple to understand but harder to maintain
-
-### 2. **Multi-Agent System** 
 - Modern modular architecture with specialized agents
 - Separation of concerns (Planning, Execution, Evaluation)
 - Enhanced with visual understanding (screenshots)
 - Memory learning system
 - Variable management for secrets
-- More maintainable and cost-effective
+- Domain-Driven Design (DDD) principles
+- Event-driven architecture
+- Workflow orchestration capabilities
 
 ## 🏗️ Architecture
 
@@ -79,28 +74,6 @@ This repository contains two distinct automation systems:
 - **Memory Service**: Learns from successes and failures
 - **Variable Manager**: Handles secrets and variable interpolation
 
-### Legacy Architecture (agents-poc)
-
-```
-┌─────────────────┐
-│   User Goal     │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│    AgentsPoc            │
-│  (Monolithic Agent)     │
-│  - Planning             │
-│  - Execution            │
-│  - Evaluation           │
-│  - Error Handling       │
-└────────┬─────────────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│   Browser + DOM Service │
-└─────────────────────────┘
-```
 
 ## 🚀 Quick Start
 
@@ -126,8 +99,6 @@ export OPENAI_API_KEY=sk-your-api-key-here
 
 ### Basic Usage
 
-#### Using Multi-Agent System (Recommended)
-
 ```typescript
 import { initMultiAgent } from './src/init-multi-agent';
 
@@ -146,58 +117,37 @@ console.log('Results:', result.extractedData);
 await workflow.cleanup();
 ```
 
-#### Using Legacy System
-
-```typescript
-import { initAgentsPoc } from './src/init-agents-poc';
-import { LLM } from './src/models';
-
-const agent = initAgentsPoc({
-  llm: new LLM({ apiKey: process.env.OPENAI_API_KEY }),
-  headless: false,
-  variables: []
-});
-
-const result = await agent.start(
-  'https://amazon.com',
-  'Search for wireless headphones under $100'
-);
-```
-
 ## 📁 Entry Points
 
 ### Production Entry Points
 
-| File | System | Purpose | Usage |
-|------|---------|----------|--------|
-| `agent-amazon-multi.ts` | Multi-Agent | Amazon automation with extraction | `npm run amazon:multi` |
-| `agent-amazon-poc.ts` | Legacy | Amazon automation (stable) | `npm run amazon:legacy` |
-| `agent-github-multi.ts` | Multi-Agent | GitHub automation with auth | `npm run github:multi` |
-| `agent-github-poc.ts` | Legacy | GitHub automation (stable) | `npm run github:legacy` |
+| File | Purpose | Usage |
+|------|----------|--------|
+| `agent-amazon-multi.ts` | Amazon automation with extraction | `npm run start:amazon-multi` |
+| `src/index.ts` | Main entry point | `npm start` |
 
 ### Development Entry Points
 
 | File | Purpose |
 |------|----------|
 | `src/init-multi-agent.ts` | Multi-agent system initializer |
-| `src/init-agents-poc.ts` | Legacy system initializer |
 | `src/init-agents.ts` | Unified initializer with feature flags |
 
-## 📊 System Comparison
+## 🏗️ Architecture Features
 
-| Feature | Legacy (agents-poc) | Multi-Agent |
-|---------|-------------------|--------------|
-| **Architecture** | Monolithic | Modular |
-| **Prompt Size** | 276 lines | 50-80 lines per agent |
-| **Maintainability** | Challenging | Easy |
-| **Cost Efficiency** | Higher | Lower (optimized models) |
-| **Visual Understanding** | Basic | Advanced (screenshots) |
-| **Memory/Learning** | No | Yes |
-| **Variable Management** | Basic | Advanced |
-| **Error Recovery** | Limited | Intelligent replanning |
-| **Strategic Planning** | Mixed with execution | Separated |
-| **Debugging** | Difficult | Easy (isolated components) |
-| **Test Coverage** | Limited | Comprehensive |
+| Feature | Implementation |
+|---------|----------------|
+| **Architecture** | Modular multi-agent system |
+| **Prompt Size** | 50-80 lines per specialized agent |
+| **Maintainability** | High - separated concerns |
+| **Cost Efficiency** | Optimized models per agent type |
+| **Visual Understanding** | Advanced screenshot analysis |
+| **Memory/Learning** | Persistent learning system |
+| **Variable Management** | Secure secret handling |
+| **Error Recovery** | Intelligent replanning |
+| **Strategic Planning** | Dedicated planning agent |
+| **Debugging** | Isolated, testable components |
+| **Test Coverage** | Comprehensive DDD testing |
 
 ## ⚙️ Configuration
 
@@ -256,24 +206,32 @@ const config = getDeploymentConfig('production');
 agents/
 ├── src/
 │   ├── core/
+│   │   ├── aggregates/       # DDD aggregates
+│   │   ├── entities/         # Domain entities
+│   │   ├── value-objects/    # DDD value objects
+│   │   ├── domain-services/  # Domain services
+│   │   ├── domain-events/    # Event system
+│   │   ├── repositories/     # Data repositories
 │   │   ├── agents/           # Agent implementations
-│   │   │   ├── agents-poc/   # Legacy monolithic agent
 │   │   │   ├── task-planner/ # Strategic planning agent
 │   │   │   ├── task-executor/# Tactical execution agent
 │   │   │   ├── task-evaluator/# Outcome evaluation agent
-│   │   │   └── error-handler/# Error analysis agent
-│   │   ├── services/         # Core services
+│   │   │   └── task-summarizer/# Result summarization
+│   │   ├── services/         # Application services
 │   │   │   ├── workflow-manager.ts
 │   │   │   ├── state-manager.ts
 │   │   │   ├── memory-service.ts
 │   │   │   └── variable-manager.ts
 │   │   ├── interfaces/       # TypeScript interfaces
 │   │   └── types/            # Type definitions
-│   ├── infra/               # Infrastructure layer
+│   ├── infrastructure/       # Infrastructure layer
+│   │   ├── repositories/     # Repository implementations
+│   │   ├── services/         # Infrastructure services
+│   │   └── event-handlers/   # Event handlers
+│   ├── infra/               # Browser automation layer
 │   │   └── services/        # Browser, DOM, Reporter
 │   └── models/              # LLM integrations
 ├── docs/                    # Documentation
-├── examples/                # Usage examples
 └── __tests__/              # Test suites
 ```
 
@@ -341,12 +299,13 @@ describe('TaskExecutor', () => {
 
 ### Common Issues
 
-#### 1. Extraction Tasks Failing
-**Problem**: Evaluator reports "No extracted data found" even when extraction succeeds.
+#### 1. Task Execution Issues
+**Problem**: Tasks may fail due to DOM changes or timing issues.
 
-**Solution**: This is a known bug being addressed. Temporary workaround:
-- Use legacy system (`agent-amazon-poc.ts`) for extraction-heavy workflows
-- Or apply the fix in `EXTRACTION_BUG_FIX_PLAN.md`
+**Solution**: The system includes intelligent error recovery:
+- Automatic retry with exponential backoff
+- Error analysis and recovery suggestions
+- Workflow replanning capabilities
 
 #### 2. "API key not found" Error
 ```bash
@@ -393,61 +352,57 @@ const workflow = initMultiAgent({
 - Screenshots: Check `screenshots/` directory
 - Browser console: Available in headed mode
 
-## 🔄 Migration Guide
+## 🔧 Advanced Configuration
 
-### Migrating from Legacy to Multi-Agent
-
-#### Step 1: Update Initialization
+### Workflow Orchestration
 
 ```typescript
-// Before (Legacy)
-import { initAgentsPoc } from './src/init-agents-poc';
-const agent = initAgentsPoc({ llm, headless, variables });
-
-// After (Multi-Agent)
 import { initMultiAgent } from './src/init-multi-agent';
-const workflow = initMultiAgent({ apiKey, headless, variables });
-```
 
-#### Step 2: Update Execution
-
-```typescript
-// Before (Legacy)
-const result = await agent.start(url, prompt);
-
-// After (Multi-Agent)
-const result = await workflow.executeWorkflow(prompt, url);
-await workflow.cleanup(); // Don't forget cleanup!
-```
-
-#### Step 3: Handle Results
-
-```typescript
-// Both systems return similar results
-console.log(result.extractedData);  // Extracted information
-console.log(result.status);         // 'success' | 'failure' | 'partial'
-console.log(result.summary);         // Human-readable summary
-```
-
-### Feature Flags for Gradual Migration
-
-```typescript
-import { initAgents } from './src/init-agents';
-
-// Use feature flag to switch systems
-const agent = initAgents({
-  useMultiAgent: true,  // Toggle this flag
-  // ... other config
+const workflow = initMultiAgent({
+  apiKey: process.env.OPENAI_API_KEY!,
+  headless: false,
+  variables: [],
+  models: {
+    planner: 'gpt-4',    // Strategic planning
+    executor: 'gpt-3.5', // Tactical execution
+    evaluator: 'gpt-3.5' // Outcome validation
+  },
+  maxRetries: 3,
+  timeout: 300000
 });
 ```
 
-### Rollback Strategy
+### Event-Driven Monitoring
 
-If issues arise with multi-agent system:
+```typescript
+// Listen to workflow events
+workflow.eventBus.subscribe('WorkflowStarted', (event) => {
+  console.log('Workflow started:', event.workflowId);
+});
 
-1. **Immediate**: Switch to legacy entry points (`*-poc.ts`)
-2. **Code**: Change `useMultiAgent: false` in feature flags
-3. **Git**: `git checkout <last-stable-commit>`
+workflow.eventBus.subscribe('TaskCompleted', (event) => {
+  console.log('Task completed:', event.taskId);
+});
+```
+
+### Custom Agent Configuration
+
+```typescript
+// Configure individual agents
+const workflow = initMultiAgent({
+  agents: {
+    planner: {
+      maxSteps: 7,
+      planningStrategy: 'strategic'
+    },
+    executor: {
+      maxRetries: 5,
+      screenshotMode: 'on-failure'
+    }
+  }
+});
+```
 
 ## 🤝 Contributing
 
@@ -499,9 +454,9 @@ If issues arise with multi-agent system:
 
 ### Examples
 
-- [Deployment Examples](examples/deployment-examples.ts) - Environment configurations
 - [Amazon Workflow](agent-amazon-multi.ts) - E-commerce automation
-- [GitHub Workflow](agent-github-multi.ts) - Repository automation
+- [Multi-Agent Architecture](docs/MULTI_AGENT_ARCHITECTURE_PLAN.md) - System design
+- [DDD Integration](docs/DDD_INTEGRATION_PLAN.md) - Domain-driven patterns
 
 ### Dependencies
 
@@ -525,7 +480,7 @@ For issues and questions:
 
 ---
 
-**Note**: This project is under active development. The multi-agent system is the recommended approach for new implementations, while the legacy system remains available for stability-critical applications.
+**Note**: This project implements a production-ready multi-agent system with Domain-Driven Design principles, comprehensive error handling, and intelligent workflow orchestration.
 
 Potential support:
   Certifying, loading, initializing, and unloading a given AI model

@@ -15,10 +15,10 @@ import {
   TaskPerformance
 } from '../../core/domain-services/evaluation-service';
 import { Task, Step, Result, TaskResult } from '../../core/entities';
-import { Evidence, Confidence, ExtractionSchema } from '../../core/value-objects';
+import { Evidence, Confidence, ExtractionSchema, TaskId, Intent, Priority } from '../../core/value-objects';
 import { LLM } from '../../core/interfaces/llm.interface';
 import { TaskEvaluatorAgent } from '../../core/agents/task-evaluator/task-evaluator';
-import { EvaluatorConfig, StrategicTask } from '../../core/types/agent-types';
+import { EvaluatorConfig } from '../../core/types/agent-types';
 
 /**
  * Infrastructure implementation of EvaluationService that bridges to the existing TaskEvaluatorAgent
@@ -165,12 +165,17 @@ export class AIEvaluationService implements EvaluationService {
     context: EvaluationContext
   ): Promise<Result<ScreenshotAnalysis>> {
     try {
-      const strategicTask: StrategicTask = {
-        id: 'screenshot-analysis',
-        step: 1,
-        description: `Analyze screenshot for: ${expectedOutcome}`,
-        expectedOutcome: `Screenshot should show: ${expectedOutcome}`,
-      };
+      // Create a proper Task entity for analysis
+      const taskId = TaskId.generate();
+      const intent = Intent.click(); // Default intent for analysis
+      const priority = Priority.medium();
+      const description = `Analyze screenshot for: ${expectedOutcome}`;
+      
+      const analysisTaskResult = Task.create(taskId, intent, description, priority, 1, 30000);
+      if (analysisTaskResult.isFailure()) {
+        return Result.fail(`Failed to create analysis task: ${analysisTaskResult.getError()}`);
+      }
+      const analysisTask = analysisTaskResult.getValue();
 
       const currentPageState = {
         url: context.currentUrl.toString(),
@@ -180,7 +185,7 @@ export class AIEvaluationService implements EvaluationService {
       };
 
       const evaluatorInput = {
-        step: strategicTask,
+        step: analysisTask,
         beforeState: currentPageState,
         afterState: currentPageState,
         microActions: [],

@@ -15,6 +15,9 @@ export { LLM } from './core/interfaces/llm.interface';
  * Export entities and classes
  */
 export { Variable } from './core/value-objects/variable';
+export { Task } from './core/entities/task';
+export { Plan } from './core/entities/plan';
+export { Step } from './core/entities/step';
 
 /**
  * Export multi-agent system classes and types (Phase 4)
@@ -24,8 +27,6 @@ export { AgentFactory } from './core/factories/agent-factory';
 export { 
   MultiAgentConfig, 
   WorkflowResult, 
-  StrategicTask,
-  StrategicPlan,
   PageState,
   StepResult
 } from './core/types/agent-types';

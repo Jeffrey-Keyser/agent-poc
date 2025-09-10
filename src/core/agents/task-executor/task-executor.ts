@@ -25,7 +25,6 @@ import { DomService } from '@/infra/services/dom-service';
  */
 export class TaskExecutorAgent implements ITaskExecutor {
   public readonly name = 'TaskExecutor';
-  public readonly model: string;
   public readonly maxRetries: number;
 
   private domService: DomService;
@@ -35,7 +34,6 @@ export class TaskExecutorAgent implements ITaskExecutor {
   constructor(llm: LLM, browser: Browser, domService: DomService, config: ExecutorConfig) {
     this.llm = llm;
     this.browser = browser;
-    this.model = config.model;
     this.maxRetries = config.maxRetries || 3;
     this.domService = domService;
   }
