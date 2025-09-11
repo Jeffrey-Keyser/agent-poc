@@ -6,7 +6,6 @@ import { TASK_SUMMARIZER_PROMPT } from './task-summarizer.prompt';
 
 export interface SummarizerConfig {
   llm: LLM;
-  model: string;
   maxRetries?: number;
   includeRecommendations?: boolean;     // Default: true
   maxSummaryLength?: number;            // Default: 500 characters

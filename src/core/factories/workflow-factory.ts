@@ -116,7 +116,6 @@ export class WorkflowFactory {
       microActionExecutor,
       {
         llm: config.llm,
-        model: config.models?.executor || 'gpt-5-nano',
         browser: infrastructure.browser,
         domService: infrastructure.domService,
         maxRetries: config.maxRetries || 3
@@ -127,7 +126,6 @@ export class WorkflowFactory {
       config.llm,
       {
         llm: config.llm,
-        model: config.models?.evaluator || 'gpt-5-nano',
         maxRetries: config.maxRetries || 2
       }
     );
@@ -156,7 +154,6 @@ export class WorkflowFactory {
   private static createSummarizer(llm: LLM, config: InitMultiAgentConfig): ITaskSummarizer {
     return new TaskSummarizerAgent(llm, {
       llm,
-      model: config.models?.summarizer || 'gpt-5-nano',
       maxRetries: config.maxRetries || 3,
       includeRecommendations: true,
       maxSummaryLength: 500

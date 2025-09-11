@@ -21,8 +21,8 @@ npm run clean             # Clean build artifacts (rm -rf dist)
 ### Running Agents
 ```bash
 # Multi-agent system
-npm run start:amazon-multi    # Amazon automation with multi-agent
-npm start                     # Run main entry point (src/index.ts)
+npm run start:multi           # Amazon automation with multi-agent (same as npm start)
+npm start                     # Run main entry point (agent-amazon-multi.ts)
 npm run dev                   # Development mode with watch
 ```
 
@@ -36,6 +36,7 @@ npm test -- --coverage       # Run tests with coverage report
 # - Framework: Jest with ts-jest
 # - Test patterns: **/__tests__/**/*.ts, **/?(*.)+(spec|test).ts
 # - Coverage threshold: Not currently enforced
+# - Note: Test script currently returns success (placeholder implementation)
 ```
 
 ### Browser Setup
@@ -148,15 +149,31 @@ The system implements intelligent error recovery through:
 ## Testing Strategy
 
 ### Test Organization
-- Unit tests alongside source files in `__tests__` directories
+- Unit tests in `src/core/__tests__/` and `src/infrastructure/` directories
 - Jest configuration in `jest.config.js`
 - TypeScript test compilation via ts-jest
+- Path alias support: `@/*` maps to `src/*`
 
 ### Test Focus Areas
 - Domain logic: Aggregates, entities, value objects
 - Service orchestration: WorkflowManager, StateManager
 - Infrastructure: Repositories, event handlers
 - Agent behavior: Input/output validation, prompt handling
+
+### Running Tests
+```bash
+# Run all tests
+npm test
+
+# Run a specific test file
+npm test -- src/core/__tests__/value-objects/variable.test.ts
+
+# Run tests matching a pattern
+npm test -- --testPathPattern=value-objects
+
+# Run with coverage
+npm test -- --coverage
+```
 
 ## Dependencies
 

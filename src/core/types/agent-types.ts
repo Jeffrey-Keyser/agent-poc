@@ -1,14 +1,17 @@
 import { MicroActionData, Variable } from '../value-objects';
 import { OpenAIModel } from '@/models/chat-openai';
 import { Task } from '../entities/task';
-import { Plan } from '../entities/plan';
+import { Browser } from '../interfaces/browser.interface';
+import { DomService } from '@/infra/services/dom-service';
+import { VariableManager } from '../services/variable-manager';
+import { LLM } from '../types';
 
 
 export interface StepResult {
   stepId: string;
   status: 'success' | 'failure' | 'partial';
-  success: boolean; // Added for compatibility with workflow-manager
-  microActions: MicroActionData[]; // What was actually executed
+  success: boolean;
+  microActions: MicroActionData[];
   evidence: {
     beforeState?: PageState;
     afterState?: PageState;
@@ -17,7 +20,6 @@ export interface StepResult {
   errorReason?: string;
   duration: number;
   attempts: number;
-  degraded?: boolean;
 }
 
 export interface PageState {
@@ -55,47 +57,16 @@ export interface ActionResult {
 }
 
 export interface ExecutorConfig {
-  llm: any; // LLM interface reference
-  model: string;
-  browser: any; // Browser interface reference
-  domService: any; // DomService interface reference
-  variableManager?: any; // VariableManager for variable interpolation
+  llm: LLM;
+  browser: Browser;
+  domService: DomService;
+  variableManager?: VariableManager;
   maxRetries?: number;
-  // Deprecated: keeping for backward compatibility
-  apiKey?: string;
 }
 
 export interface EvaluatorConfig {
-  llm: any; // LLM interface reference
-  model: string;
+  llm: LLM;
   maxRetries?: number;
-  // Deprecated: keeping for backward compatibility
-  apiKey?: string;
-}
-
-export interface WorkflowManagerConfig {
-  constraints?: string[];
-  timeout?: number;
-  maxGlobalRetries?: number;
-  variableManager?: any; // VariableManager for variable interpolation
-}
-
-// Event types for the workflow system
-export interface WorkflowEvent {
-  type: string;
-  timestamp: Date;
-  goal?: string;
-  plan?: Plan;
-  data?: any;
-}
-
-export interface TaskEvent {
-  type: string;
-  timestamp: Date;
-  task: Task;
-  result?: StepResult;
-  duration?: number;
-  data?: any;
 }
 
 export interface WorkflowResult {
@@ -114,7 +85,6 @@ export interface WorkflowResult {
   duration: number;
 }
 
-// Multi-agent system configuration
 export interface MultiAgentConfig {
   headless: boolean;
   variables: Variable[]; 
@@ -129,7 +99,6 @@ export interface MultiAgentConfig {
   timeout: number;
 }
 
-// Error handling types
 export interface ErrorContext {
   task: Task;
   result: StepResult;
@@ -137,20 +106,6 @@ export interface ErrorContext {
   timestamp: Date;
 }
 
-// Import and re-export agent interfaces that were previously missing
-export type { 
-  ITaskPlanner, 
-  ITaskExecutor, 
-  ITaskEvaluator, 
-  IErrorHandler,
-  PlannerInput,
-  PlannerOutput,
-  ExecutorInput,
-  ExecutorOutput,
-  EvaluatorInput,
-  EvaluatorOutput,
-  ReplanContext 
-} from '../interfaces/agent.interface';
 
 export interface RetryStrategy {
   shouldRetry: boolean;
@@ -158,23 +113,4 @@ export interface RetryStrategy {
   delayMs: number;
   modifications?: Partial<Task>;
   reason: string;
-}
-
-// Browser automation types (extending existing interfaces)
-export interface BrowserState {
-  url: string;
-  title: string;
-  isLoading: boolean;
-  hasErrors: boolean;
-  viewport: {
-    width: number;
-    height: number;
-  };
-}
-
-export interface InteractionContext {
-  element: DOMElement;
-  pageState: PageState;
-  intent: Task;
-  previousActions: MicroActionData[];
 }

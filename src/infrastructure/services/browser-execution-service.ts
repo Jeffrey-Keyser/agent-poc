@@ -9,11 +9,12 @@ import { TaskId, ActionType, Evidence, Duration } from '../../core/value-objects
 import { Browser } from '../../core/interfaces/browser.interface';
 import { LLM } from '../../core/interfaces/llm.interface';
 import { TaskExecutorAgent } from '../../core/agents/task-executor/task-executor';
-import { ExecutorConfig, ExecutorInput } from '../../core/types/agent-types';
+import { ExecutorConfig } from '../../core/types/agent-types';
 import { MicroAction, MicroActionData } from '../../core/value-objects/task';
 import { ActionResult } from '../../core/types/agent-types';
 import { MicroActionExecutor } from './micro-action-executor';
 import { DomService } from '@/infra/services/dom-service';
+import { ExecutorInput } from '@/core/types';
 
 /**
  * Infrastructure implementation of ExecutionService that bridges to the existing TaskExecutorAgent
