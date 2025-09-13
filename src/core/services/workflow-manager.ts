@@ -1,123 +1,47 @@
+// SIMPLIFIED WorkflowManager - Now just coordinates between extracted services
 import { 
-  StepResult,
-  PageState,
-  WorkflowResult,
-} from '../types/agent-types';
-import { ITaskSummarizer, SummarizerInput } from '../interfaces/agent.interface';
-import { EnhancedEventBusInterface } from '../interfaces/event-bus.interface';
-import { Browser } from '../interfaces/browser.interface';
-import { DomService } from '@/infra/services/dom-service';
-import { MicroActionExecutor } from '../../infrastructure/services/micro-action-executor';
-import { AgentReporter } from '../interfaces/agent-reporter.interface';
-import { StateManager } from './state-manager';
-import { MemoryService, MemoryContext } from './memory-service';
-import { VariableManager } from './variable-manager';
-import { 
-  PlanningService, 
-  ExecutionService, 
-  EvaluationService,
-  PlanningContext,
-  AITaskPlanningService,
-  EvaluationContext
-} from '../domain-services';
-import { 
-  WorkflowEventBus,
-  WorkflowEventBusFactory
-} from './domain-event-bridge';
-import { DomainEvent } from '../domain-events';
-import { 
-  EventHandlerFactory,
-  WorkflowMetricsHandler,
-  WorkflowLoggingHandler,
-  TaskFailureHandler,
-  WorkflowStuckHandler
-} from '../../infrastructure/event-handlers';
-import { InMemoryEventStore, IEventStore } from '../domain-events';
-import { WorkflowSaga, SagaFactory } from '../sagas';
-import {
-  WorkflowRepository,
-  PlanRepository,
-  MemoryRepository
-} from '../repositories';
-import {
-  Workflow,
-  Plan,
-  Result,
-  Session,
-  ExecutionContext,
-  Step,
-  Task,
-  TaskResult
+  Workflow, Plan, Result, Session, ExecutionContext
 } from '../entities';
-import {
-  Variable,
-  Url,
-  SessionId,
-  Viewport,
-  Evidence,
-  Priority,
-  TaskId,
-  Intent
-} from '../value-objects';
-import {
-  WorkflowAggregate,
-  ExecutionAggregate,
-  ExecutionStatistics
-} from '../aggregates';
-import { LLM } from '../types';
+import { WorkflowResult } from '../types/agent-types';
+import { WorkflowOrchestrator } from '../domain-services/workflow-orchestrator';
+import { WorkflowPlanningService } from '../domain-services/workflow-planning-service';
+import { WorkflowEventCoordinator } from '../domain-services/workflow-event-coordinator';
+import { WorkflowStateCoordinator } from '../domain-services/workflow-state-coordinator';
+import { 
+  WorkflowRepository, 
+  PlanRepository, 
+  MemoryRepository 
+} from '../repositories';
+import { WorkflowAggregate } from '../aggregates/workflow-aggregate';
+import { ExecutionAggregate } from '../aggregates/execution-aggregate';
+import { SessionId, Url } from '../value-objects';
+import { ITaskSummarizer } from '../interfaces/agent.interface';
 
 export interface WorkflowManagerConfig {
   maxRetries?: number;
   timeout?: number;
   enableReplanning?: boolean;
-  variableManager?: VariableManager;
   allowEarlyExit?: boolean;
   minAcceptableCompletion?: number;
 }
 
-interface StateChangeAnalysis {
-  requiresReplanning: boolean;
-  reason: string;
-}
-
 export class WorkflowManager {
-  private workflowAggregate: WorkflowAggregate | null = null;
   private executionAggregate: ExecutionAggregate | null = null;
-  
   private workflow: Workflow | null = null;
   private currentPlan: Plan | null = null;
-
-    // TODO: Does goal make sense as an entity, value object?
-  private currentGoal: string = '';
-  private completedSteps: Map<string, StepResult> = new Map();
   private startTime: Date | null = null;
-  private stateManager: StateManager;
-  private memoryService: MemoryService;
-  private errors: string[] = [];
-
-  private planningService: PlanningService;
-  private workflowEventBus: WorkflowEventBus;
-  private metricsHandler: WorkflowMetricsHandler;
-  private loggingHandler: WorkflowLoggingHandler;
-  private taskFailureHandler: TaskFailureHandler;
-  private workflowStuckHandler: WorkflowStuckHandler;
-  private eventStore: IEventStore;
-  private workflowSaga: WorkflowSaga;
-
+  
   constructor(
-    private llm: LLM, // I think ideally this would be abstracted away at the factory level
-    private executionService: ExecutionService,
-    private evaluationService: EvaluationService,
-    private workflowRepository: WorkflowRepository,
-    private planRepository: PlanRepository,
-    private memoryRepository: MemoryRepository,
-    private eventBus: EnhancedEventBusInterface,
-    private browser: Browser,
-    private domService: DomService,
-    // @ts-ignore
-    private microActionExecutor: MicroActionExecutor,
-    private reporter: AgentReporter,
-    private summarizer: ITaskSummarizer,
+    private orchestrator: WorkflowOrchestrator,
+    private planningService: WorkflowPlanningService,
+    private eventCoordinator: WorkflowEventCoordinator,
+    private stateCoordinator: WorkflowStateCoordinator,
+    private repositories: {
+      workflow: WorkflowRepository;
+      plan: PlanRepository;
+      memory: MemoryRepository;
+    },
+    private summarizer?: ITaskSummarizer,
     private config: WorkflowManagerConfig = {}
   ) {
     this.config = {
@@ -129,60 +53,30 @@ export class WorkflowManager {
       ...config
     };
     
-    this.stateManager = new StateManager(this.browser, this.domService);
-    this.memoryService = new MemoryService(this.eventBus, this.memoryRepository);
-    this.planningService = new AITaskPlanningService(
-      this.stateManager,
-      this.llm,
-      this.memoryService
-    );
-    this.setupStateManagerEventListeners();
-    this.connectDomainEventsToMonitor();
-    
-    // Services are now directly injected as constructor parameters
-
-    this.workflowEventBus = WorkflowEventBusFactory.create(this.eventBus);
-    this.eventStore = new InMemoryEventStore();
-    
-    // Create and register all advanced event handlers
-    const handlers = EventHandlerFactory.createAdvancedHandlers(true);
-    this.metricsHandler = handlers.metrics;
-    this.loggingHandler = handlers.logging;
-    this.taskFailureHandler = handlers.taskFailure;
-    this.workflowStuckHandler = handlers.workflowStuck;
-    this.summarizer = summarizer;
-    
-    // Create and register workflow saga
-    this.workflowSaga = SagaFactory.createWorkflowSaga(this.reporter);
-    
-    // Register all handlers with the domain event bus
-    this.workflowEventBus.registerDomainEventHandler(this.metricsHandler);
-    this.workflowEventBus.registerDomainEventHandler(this.loggingHandler);
-    this.workflowEventBus.registerDomainEventHandler(this.taskFailureHandler);
-    this.workflowEventBus.registerDomainEventHandler(this.workflowStuckHandler);
-    this.workflowEventBus.registerDomainEventHandler(this.workflowSaga);
-    
-    this.reporter.log('📡 Domain event handlers registered: metrics, logging, task-failure, workflow-stuck, saga');
+    this.setupEventListeners();
   }
 
+  /**
+   * Execute a workflow with the given goal
+   */
   async execute(goal: string, startUrl?: string): Promise<WorkflowResult> {
     this.startTime = new Date();
-    this.currentGoal = goal;
-    this.reporter.log(`🚀 Starting workflow: ${goal}`);
+    this.eventCoordinator.emitEvent('workflow:started', { goal, startUrl });
     
     try {
-      await this.initializePlan(goal, startUrl);
-      await this.setupAggregates();
-
-      const successfullyCompletedTasks = await this.executeSteps();
+      // Initialize workflow and plan
+      await this.initializeWorkflow(goal, startUrl);
       
-      await this.finalizeWorkflow(successfullyCompletedTasks);
+      // Execute the workflow steps
+      const executionResult = await this.executeWorkflow();
       
-      await this.publishEntityEvents();
-      return await this.buildWorkflowResult();
+      // Handle completion
+      await this.finalizeWorkflow(executionResult);
+      
+      return this.buildWorkflowResult();
+      
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.emitWorkflowEvent('workflow:error', { error: errorMessage });
+      this.handleWorkflowError(error as Error);
       throw error;
     } finally {
       await this.cleanup();
@@ -190,55 +84,40 @@ export class WorkflowManager {
   }
 
   /**
-   * Initialize workflow, create plan, and launch browser
+   * Initialize workflow with plan
    */
-  private async initializePlan(goal: string, startUrl?: string): Promise<void> {
-    const initialUrl = startUrl || '';
-    const variables: Variable[] = [];
-    
-    // Create workflow entity
-    const workflowResult = Workflow.create(goal, initialUrl, variables);
+  private async initializeWorkflow(goal: string, startUrl?: string): Promise<void> {
+    // Create workflow entity first
+    const variables: any[] = [];
+    const workflowResult = Workflow.create(goal, startUrl || '', variables);
     if (workflowResult.isFailure()) {
       throw new Error(`Failed to create workflow: ${workflowResult.getError()}`);
     }
     this.workflow = workflowResult.getValue();
     
     // Save workflow to repository
-    await this.workflowRepository.save(this.workflow);
-    this.reporter.log(`💾 Workflow saved to repository: ${this.workflow.getId().toString()}`);
+    await this.repositories.workflow.save(this.workflow);
     
-    // Launch browser
-    await this.browser.launch(initialUrl);
-    this.reporter.log(`🌐 Browser launched at: ${initialUrl}`);
-    this.emitWorkflowEvent('workflow:started', { goal: this.workflow.goal.toString() });
+    // Initialize state
+    await this.stateCoordinator.initializeState(startUrl);
     
-    // Create plan
-    const currentUrl = this.browser.getPageUrl();
-    const planResult = await this.createPlan(goal, currentUrl);
+    // Create initial plan
+    const planResult = await this.planningService.initializePlan(this.workflow, startUrl);
+    
     if (planResult.isFailure()) {
-      throw new Error(`Domain planning failed: ${planResult.getError()}`);
+      throw new Error(`Failed to create plan: ${planResult.getError()}`);
     }
     
     this.currentPlan = planResult.getValue();
-    // Save plan to repository
-    await this.planRepository.save(this.currentPlan);
-    this.reporter.log(`💾 Plan saved to repository: ${this.currentPlan.getId().toString()}`);
-  }
-
-  /**
-   * Setup workflow and execution aggregates
-   */
-  private async setupAggregates(): Promise<void> {
-    if (!this.workflow || !this.currentPlan) {
-      throw new Error('Workflow and plan must be initialized before setting up aggregates');
-    }
+    await this.repositories.plan.save(this.currentPlan);
     
+    // Create session for aggregate
     const sessionResult = Session.createDefault(this.workflow.getId());
     if (sessionResult.isFailure()) {
       throw new Error(`Failed to create session: ${sessionResult.getError()}`);
     }
     
-    // Create workflow aggregate using its static factory method
+    // Create workflow aggregate (for potential future use)
     const workflowAggregateResult = WorkflowAggregate.create(
       this.workflow,
       this.currentPlan,
@@ -247,905 +126,270 @@ export class WorkflowManager {
     if (workflowAggregateResult.isFailure()) {
       throw new Error(`Failed to create workflow aggregate: ${workflowAggregateResult.getError()}`);
     }
-    this.workflowAggregate = workflowAggregateResult.getValue();
+    // workflowAggregate stored in local variable only - not needed as instance variable
     
-    // Create execution context for execution aggregate
+    // Create execution context and aggregate
     const sessionId = SessionId.generate();
-    const viewport = Viewport.create(1920, 1080).getValue();
+    const viewport = { width: 1920, height: 1080 }; // Use simple object instead of Viewport
+    const urlResult = startUrl ? Url.create(startUrl) : Url.create('');
+    if (!urlResult.isSuccess()) {
+      throw new Error(`Failed to create URL: ${urlResult.getError()}`);
+    }
+    
     const contextResult = ExecutionContext.create(
       sessionId,
       this.workflow.getId(),
-      this.workflow.startUrl,
-      viewport
+      urlResult.getValue(),
+      viewport as any
     );
     if (contextResult.isFailure()) {
       throw new Error(`Failed to create execution context: ${contextResult.getError()}`);
     }
     
-    // Create execution aggregate using its static factory method
-    const executionAggregateResult = ExecutionAggregate.create(contextResult.getValue(), this.stateManager);
+    // Get state manager from state coordinator
+    const stateManager = this.stateCoordinator.getStateManager();
+    const executionAggregateResult = ExecutionAggregate.create(contextResult.getValue(), stateManager);
     if (executionAggregateResult.isFailure()) {
       throw new Error(`Failed to create execution aggregate: ${executionAggregateResult.getError()}`);
     }
     this.executionAggregate = executionAggregateResult.getValue();
-    
-    // Start workflow execution
-    const startResult = this.workflowAggregate.startExecution();
-    if (startResult.isFailure()) {
-      throw new Error(`Failed to start workflow execution: ${startResult.getError()}`);
-    }
   }
 
-
   /**
-   * Execute all workflow steps
+   * Execute the workflow using orchestrator
    */
-  private async executeSteps(): Promise<Task[]> {
-    const successfullyCompletedTasks: Task[] = [];
-    for (const step of this.currentPlan!.getSteps()) {
-      // TODO: Update this to utilize the aggregate
+  private async executeWorkflow(): Promise<Result<any>> {
+    if (!this.workflow || !this.currentPlan || !this.executionAggregate) {
+      return Result.fail('Workflow not properly initialized');
+    }
+    
+    let attemptCount = 0;
+    let lastError: string | null = null;
+    
+    while (attemptCount < 3) {
+      attemptCount++;
       
-      const stepExecutionResult = await this.executeStep(step);
-      successfullyCompletedTasks.push(...stepExecutionResult.successfulTasks);
-      
-      const continueExecution = await this.processStepCompletion(
-        step,
-        stepExecutionResult.taskResults,
-        stepExecutionResult.stepSuccess
+      // Execute with orchestrator
+      const context = this.executionAggregate.getContext();
+      const result = await this.orchestrator.executeWorkflow(
+        this.workflow,
+        this.currentPlan,
+        context
       );
       
-      if (!continueExecution) {
-        break;
+      if (result.isSuccess()) {
+        return result;
       }
-    }
-    
-    return successfullyCompletedTasks;
-  }
-
-  /**
-   * Execute a single step and all its tasks
-   */
-  private async executeStep(step: Step): Promise<{
-    stepSuccess: boolean;
-    taskResults: TaskResult[];
-    successfulTasks: Task[];
-  }> {
-    this.reporter.log(`⚡ Executing step: ${step.getDescription()}`);
-    
-    // Mark step as started
-    const stepStartResult = step.start();
-    if (stepStartResult.isFailure()) {
-      this.reporter.log(`Failed to start step: ${stepStartResult.getError()}`);
-      return { stepSuccess: false, taskResults: [], successfulTasks: [] };
-    }
-    
-    const stepTaskResults: TaskResult[] = [];
-    const successfulTasks: Task[] = [];
-    
-    // TODO: Convert to tasks
-    const placeholderTask = Task.create(TaskId.generate(), Intent.click(), step.description, Priority.low(), 1, 5000);
-
-    const taskResult = placeholderTask.getValue();
-    step.addTask(taskResult);
-    const taskExecutionResult = await this.executeTask(taskResult, step);
-    stepTaskResults.push(taskExecutionResult.result);
-    
-    if (taskExecutionResult.task) {
-      successfulTasks.push(taskExecutionResult.task);
-    }
-    
-    // Determine step success
-    const stepSuccess = stepTaskResults.every(r => r.success);
-    
-    const stepResult: StepResult = {
-      stepId: step.getId().toString(),
-      success: stepSuccess,
-      status: stepSuccess ? 'success' : 'failure',
-      microActions: [],
-      evidence: {
-        extractedData: stepTaskResults.filter(r => r.data).flatMap(r => r.data)
-      },
-      duration: stepTaskResults.reduce((sum, r) => sum + (r.duration || 0), 0),
-      attempts: 1
-    };
-    this.completedSteps.set(step.getId().toString(), stepResult);
-    
-    return { stepSuccess, taskResults: stepTaskResults, successfulTasks };
-  }
-
-  /**
-   * Execute a single task with error handling and retry logic
-   */
-  private async executeTask(task: Task, _step: Step): Promise<{
-    result: TaskResult;
-    task?: Task | undefined;
-    shouldBreak: boolean;
-  }> {
-    // TODO: Setup this.
-    // const startExecutionResult = this.executionAggregate!.startTaskExecution(task);
-    // if (startExecutionResult.isFailure()) {
-    //   this.reporter.log(`Failed to start task: ${startExecutionResult.getError()}`);
-    //   return {
-    //     result: {
-    //       taskId: task.getId().toString(),
-    //       success: false,
-    //       error: startExecutionResult.getError(),
-    //       timestamp: new Date()
-    //     },
-    //     shouldBreak: false
-    //   };
-    // }
-    
-    this.reporter.log(`⚡ Executing task: ${task.getDescription()}`);
-    const taskStartTime = Date.now();
-    
-    try {
-      const executionResult = await this.executionService.executeTask(task);
       
-      let taskResult: TaskResult;
-      let executionEvidence: Evidence[] = [];
-      if (executionResult.isSuccess()) {
-        const result = executionResult.getValue();
-        executionEvidence = result.evidence || [];
-        
-        const evaluationResult = await this.evaluationService.evaluateTaskCompletion(
-          task,
-          result.evidence,
-          this.buildEvaluationContext()
+      lastError = result.getError();
+      
+      // Check if replanning is needed and enabled
+      if (this.config.enableReplanning && this.shouldReplan(lastError)) {
+        const replanResult = await this.planningService.replanWorkflow(
+          this.workflow,
+          {
+            previousPlan: this.currentPlan,
+            failureReason: lastError,
+            currentState: this.stateCoordinator.getCurrentContext(),
+            attemptNumber: attemptCount
+          }
         );
         
-        taskResult = {
-          taskId: task.getId().toString(),
-          success: evaluationResult.isSuccess(),
-          duration: Date.now() - taskStartTime,
-          data: result.evidence ? result.evidence.map(e => e.getData()) : [],
-          timestamp: new Date()
-        };
-      } else {
-        taskResult = {
-          taskId: task.getId().toString(),
-          success: false,
-          error: executionResult.getError(),
-          timestamp: new Date()
-        };
+        if (replanResult.isSuccess()) {
+          this.currentPlan = replanResult.getValue();
+          await this.repositories.plan.save(this.currentPlan);
+          continue; // Retry with new plan
+        }
       }
       
-      // await this.recordTaskExecution(task, taskResult, step);
-      
-      let completedTask: Task | undefined;
-      if (taskResult.success) {
-        completedTask = task;
-        this.reporter.log(`✅ Task completed: ${task.getDescription()}`);
-        
-        await this.processExtractedDataFromEvidence(executionEvidence);
-        
-        await this.updateExecutionContextUrl();
-      } else {
-        await this.handleTaskFailure(task);
+      // Check if we should exit early
+      if (this.config.allowEarlyExit && this.hasMinimumCompletion()) {
+        return Result.ok(this.orchestrator.getProgress().completedSteps);
       }
       
-      // Check for early exit or replanning  
-      const shouldBreak = await this.checkPostTaskConditions(taskResult);
-      
-      if (taskResult.success && completedTask) {
-        const stepResult: StepResult = {
-          stepId: task.getId().toString(),
-          success: true,
-          status: 'success',
-          microActions: [],
-          evidence: {
-            extractedData: taskResult.data
-          },
-          duration: taskResult.duration || 0,
-          attempts: 1
-        };
-        this.completedSteps.set(task.getId().toString(), stepResult);
-      }
-      
-      return { result: taskResult, task: completedTask, shouldBreak };
-      
-    } catch (error) {
-      const errorResult = {
-        taskId: task.getId().toString(),
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-        timestamp: new Date()
+      break; // Exit if can't replan or recover
+    }
+    
+    return Result.fail(lastError || 'Workflow execution failed');
+  }
+
+  /**
+   * Finalize workflow execution
+   */
+  private async finalizeWorkflow(executionResult: Result<any>): Promise<void> {
+    if (!this.workflow || !this.currentPlan) return;
+    
+    const success = executionResult.isSuccess();
+    const extractedData = this.stateCoordinator.getExtractedData();
+    
+    // Update memory with results
+    await this.stateCoordinator.updateMemory(
+      this.workflow,
+      this.currentPlan,
+      success,
+      extractedData
+    );
+    
+    // Generate summary if available
+    if (this.summarizer && success) {
+      const summarizerInput = {
+        goal: this.workflow.goal,
+        plan: this.currentPlan.getSteps().map(step => ({
+          id: step.getId().toString(),
+          step: step.getOrder(),
+          description: step.getDescription(),
+          expectedOutcome: step.getDescription()
+        })),
+        completedSteps: [], // Would be populated from completed steps
+        extractedData: extractedData,
+        totalDuration: this.getDuration(),
+        startTime: this.startTime || new Date(),
+        endTime: new Date(),
+        errors: [],
+        url: ''
       };
       
-      task.fail(error instanceof Error ? error : new Error(String(error)));
-      await this.recordTaskFailureInMemory(task, error instanceof Error ? error : new Error(String(error)));
-      
-      return { result: errorResult, shouldBreak: false };
+      const summary = await this.summarizer.execute(summarizerInput);
+      this.eventCoordinator.emitEvent('workflow:summary', { summary });
     }
+    
+    // Emit completion event
+    this.eventCoordinator.emitEvent('workflow:completed', {
+      workflowId: this.workflow.getId(),
+      success,
+      extractedData,
+      duration: this.getDuration()
+    });
   }
 
   /**
-   * Record task execution in aggregate and workflow
+   * Build the workflow result
    */
-  // @ts-ignore
-  private async recordTaskExecution(task: Task, taskResult: TaskResult, currentStep: Step): Promise<void> {
-    const evidence = taskResult.data ? 
-      Evidence.create(
-        'screenshot',
-        JSON.stringify({ extractedData: taskResult.data }),
-        { source: 'domain-service-execution', description: 'Domain service task execution' }
-      ).getValue() : undefined;
+  private buildWorkflowResult(): WorkflowResult {
+    const extractedData = this.stateCoordinator.getExtractedData();
+    const progress = this.orchestrator.getProgress();
     
-    const recordResult = await this.executionAggregate!.recordExecution(
-      task,
-      taskResult,
-      evidence,
-      `Step: ${currentStep.getDescription()}`
-    );
+    // Determine status based on progress
+    let status: 'success' | 'failure' | 'partial' | 'degraded' = 'failure';
+    const completionPercentage = progress.total > 0 ? (progress.completed / progress.total) * 100 : 0;
     
-    if (recordResult.isFailure()) {
-      this.reporter.log(`Failed to record execution: ${recordResult.getError()}`);
+    if (completionPercentage === 100) {
+      status = 'success';
+    } else if (completionPercentage >= 70) {
+      status = 'partial';
+    } else if (completionPercentage >= 40) {
+      status = 'degraded';
     }
-    
-    // Update task state
-    if (taskResult.success) {
-      task.complete(taskResult);
-      this.workflowAggregate!.recordTaskCompletion(task.getId(), taskResult);
-    } else {
-      task.fail(new Error(taskResult.error || 'Task execution failed'));
-    }
-  }
-
-
-  /**
-   * Update execution context with current URL
-   */
-  private async updateExecutionContextUrl(): Promise<void> {
-    try {
-      const currentUrlString = this.browser.getPageUrl();
-      const urlResult = Url.create(currentUrlString);
-      if (urlResult.isSuccess()) {
-        this.executionAggregate!.updateCurrentUrl(urlResult.getValue());
-      }
-    } catch (error) {
-      this.reporter.log(`Warning: Failed to update execution context: ${error}`);
-    }
-  }
-
-  /**
-   * Handle task failure including retry logic
-   */
-  private async handleTaskFailure(task: Task): Promise<void> {
-    if (task.canRetry()) {
-      this.reporter.log(`🔄 Retrying task ${task.getRetryCount()}/${task.getMaxRetries()}`);
-      const retryResult = task.retry();
-      if (retryResult.isSuccess()) {
-        this.reporter.log(`🔄 Task marked for retry: ${task.getDescription()}`);
-      }
-    }
-  }
-
-  /**
-   * Record task failure in memory service
-   */
-  private async recordTaskFailureInMemory(task: Task, error: Error): Promise<void> {
-    const beforeState = await this.captureSemanticState();
-    const context: MemoryContext = {
-      url: this.browser.getPageUrl(),
-      taskGoal: task.getDescription(),
-      pageSection: beforeState.visibleSections[0]
-    };
-    
-    this.memoryService.addLearning(
-      context,
-      `Task "${task.getDescription()}" failed: ${error}`,
-      {
-        actionToAvoid: task.getDescription(),
-        alternativeAction: 'Try different approach or selector',
-        confidence: 0.8
-      }
-    );
-  }
-
-  /**
-   * Check conditions after task execution (early exit, replanning)
-   */
-  private async checkPostTaskConditions(taskResult: TaskResult): Promise<boolean> {
-    if (!taskResult.success) {
-      return false;
-    }
-    
-    if (this.config.enableReplanning) {
-      const replanRequired = await this.checkForReplanning();
-      if (replanRequired) {
-        this.reporter.log(`🔄 Replanning executed after successful task due to significant state changes`);
-        return true; // Break from task execution
-      }
-    }
-    
-    if (this.config.allowEarlyExit) {
-      const completion = this.calculateCompletionPercentage();
-      
-      if (completion >= (this.config.minAcceptableCompletion || 60)) {
-        this.reporter.log(`✅ Achieved ${completion.toFixed(1)}% completion with critical steps done. Exiting with partial success.`);
-        return true; // Will trigger early exit
-      }
-    }
-    
-    return false;
-  }
-
-  /**
-   * Process step completion and determine if workflow should continue
-   */
-  private async processStepCompletion(
-    step: Step,
-    _stepTaskResults: TaskResult[],
-    stepSuccess: boolean
-  ): Promise<boolean> {
-    // TODO: Completed
-    // const completeStepResult = this.workflowAggregate!.completeStep(
-    //   step.getId(),
-    //   stepTaskResults
-    // );
-    
-    // if (completeStepResult.isFailure()) {
-    //   this.reporter.log(`Failed to complete step: ${completeStepResult.getError()}`);
-    // }
-    
-    this.reporter.log(`✅ Step completed: ${step.getDescription()} (Success: ${stepSuccess})`);
-    
-    const status = this.workflowAggregate!.getExecutionStatus();
-    if (status.completionPercentage >= 100) {
-      this.reporter.log('🎉 Workflow completed successfully');
-      return false; // Stop execution
-    }
-    
-    // Handle step success
-    if (stepSuccess) {
-      // TODO: Setup this.
-      // const advanceResult = this.workflowAggregate!.advanceToNextStep();
-      // if (advanceResult.isFailure()) {
-      //   this.reporter.log(`Cannot advance: ${advanceResult.getError()}`);
-      //   return false; // Stop execution
-      // }
-      return true; // Continue to next step
-    }
-    
-    // Handle step failure
-    return await this.handleStepFailure(step);
-  }
-
-  /**
-   * Handle step failure including retry logic and replanning
-   */
-  private async handleStepFailure(currentStep: Step): Promise<boolean> {
-    this.reporter.log(`❌ Step failed: ${currentStep.getDescription()}`);
-    
-    // Check current step state after completeStep processing
-    const stepAfterProcessing = this.workflowAggregate!.getNextStep();
-    if (stepAfterProcessing.isFailure()) {
-      this.reporter.log(`No more steps available: ${stepAfterProcessing.getError()}`);
-      return false; // Stop execution
-    }
-    
-    const step = stepAfterProcessing.getValue();
-    
-    if (step.getId().equals(currentStep.getId())) {
-      // Same step - check if it was reset for retry
-      if (step.isPending()) {
-        this.reporter.log(`🔄 Step reset for retry: ${step.getDescription()} (${step.getRetryCount()}/${step.getMaxRetries()})`);
-        return true;
-      } else if (step.isFailed() && !step.canRetry()) {
-        this.reporter.log(`💀 Step permanently failed: ${step.getDescription()} (max retries exceeded)`);
-        // Try to advance to next step
-        const advanceResult = this.workflowAggregate!.advanceToNextStep();
-        if (advanceResult.isFailure()) {
-          this.reporter.log(`Cannot advance from permanently failed step: ${advanceResult.getError()}`);
-          return false; // Stop execution
-        }
-        return true; // Continue with next step
-      }
-    } else {
-      // Different step - WorkflowAggregate advanced to next step automatically
-      this.reporter.log(`➡️ Advanced to next step after failure: ${step.getDescription()}`);
-    }
-    
-    // Handle replanning for complex failure scenarios
-    if (this.config.enableReplanning) {
-      const replanRequired = await this.checkForReplanning();
-      if (replanRequired) {
-        this.reporter.log(`🔄 Replanning triggered due to step failure`);
-      }
-    }
-    
-    return true;
-  }
-
-  /**
-   * Finalize workflow execution status
-   */
-  private async finalizeWorkflow(successfullyCompletedTasks: Task[]): Promise<void> {
-    if (!this.workflowAggregate) {
-      this.reporter.log('⚠️ No workflow aggregate to finalize');
-      return;
-    }
-    
-    const status = this.workflowAggregate.getExecutionStatus();
-    const allExtractedData = this.stateManager.getAllExtractedData();
-    
-    if (status.completionPercentage >= 100) {
-      // Full completion
-      const completionResult = this.workflowAggregate.completeExecution(
-        'Workflow completed successfully',
-        allExtractedData
-      );
-      
-      if (completionResult.isSuccess()) {
-        this.reporter.log('✅ Workflow completed successfully');
-      } else {
-        this.reporter.log(`⚠️ Failed to mark workflow as complete: ${completionResult.getError()}`);
-      }
-    } else {
-      await this.handlePartialCompletion(successfullyCompletedTasks, allExtractedData);
-    }
-    
-    // Update workflow in repository
-    await this.workflowRepository.update(this.workflow!);
-    this.reporter.log(`💾 Workflow updated in repository: ${this.workflow!.getId().toString()}`);
-    this.reporter.log(`📊 Workflow execution completed using direct aggregate approach`);
-  }
-
-  /**
-   * Handle partial workflow completion
-   */
-  private async handlePartialCompletion(
-    successfullyCompletedTasks: Task[],
-    allExtractedData: Record<string, any>
-  ): Promise<void> {
-    const successfulSteps = successfullyCompletedTasks.length;
-    const totalSteps = this.currentPlan?.getSteps().length || 0;
-    const partialCompletionPercentage = totalSteps > 0 ? (successfulSteps / totalSteps) * 100 : 0;
-    
-    if (partialCompletionPercentage >= 50 || successfulSteps >= 2) {
-      // Consider this a partial success
-      this.reporter.log(
-        `⚠️ Workflow partially completed: ${successfulSteps}/${totalSteps} steps ` +
-        `(${partialCompletionPercentage.toFixed(1)}%)`
-      );
-      
-      const partialCompletionResult = this.workflowAggregate!.completeExecution(
-        `Workflow partially completed: ${successfulSteps}/${totalSteps} steps completed`,
-        allExtractedData
-      );
-      
-      if (partialCompletionResult.isFailure()) {
-        this.reporter.log(`⚠️ Failed to mark workflow as partially complete: ${partialCompletionResult.getError()}`);
-      }
-    } else {
-      // Mark as failed if very little progress was made
-      this.workflowAggregate!.failExecution(
-        `Workflow execution stopped with minimal progress: ${successfulSteps}/${totalSteps} steps completed`
-      );
-    }
-  }
-
-
-  private async captureSemanticState(): Promise<PageState> {
-    return await this.stateManager.captureState();
-  }
-
-  private async checkForReplanning(): Promise<boolean> {
-    const currentState = this.stateManager.getCurrentState();
-    const previousState = this.stateManager.getPreviousState();
-    
-    if (!currentState || !previousState) return false;
-    
-    if (this.stateManager.hasStateChanged(previousState, currentState)) {
-      const changes = this.analyzeStateChanges(previousState, currentState);
-      
-      if (changes.requiresReplanning) {
-        this.reporter.log('🔄 Significant state change detected, triggering replanning');
-        
-        // Create checkpoint before replanning
-        this.stateManager.createCheckpoint('before-replan');
-        const newPlan = await this.replanWithStateContext(currentState);
-        
-        if (newPlan) {
-          this.currentPlan = newPlan;
-          this.eventBus.emit('replan:triggered', {
-            reason: changes.reason,
-            newPlanSize: newPlan.getSteps().length
-          });
-          return true;
-        }
-      }
-    }
-    
-    return false;
-  }
-
-  private analyzeStateChanges(prev: PageState, curr: PageState): StateChangeAnalysis {
-    const prevSections = new Set(prev.visibleSections);
-    const currSections = new Set(curr.visibleSections);
-    const prevActions = new Set(prev.availableActions);
-    const currActions = new Set(curr.availableActions);
-    
-    const sectionChanges = this.calculateSetDifference(prevSections, currSections);
-    const actionChanges = this.calculateSetDifference(prevActions, currActions);
     
     return {
-      requiresReplanning: sectionChanges > 0.5 || actionChanges > 0.5,
-      reason: `Sections changed ${(sectionChanges * 100).toFixed(0)}%, Actions changed ${(actionChanges * 100).toFixed(0)}%`
-    };
-  }
-
-  private calculateSetDifference(set1: Set<string>, set2: Set<string>): number {
-    const union = new Set([...set1, ...set2]);
-    const intersection = new Set([...set1].filter(x => set2.has(x)));
-    
-    if (union.size === 0) return 0;
-    return 1 - (intersection.size / union.size);
-  }
-
-  private async replanWithStateContext(currentState: PageState): Promise<Plan | null> {
-    try {
-      // Extract context from current state
-      const stateContext = {
-        currentUrl: currentState.url,
-        availableActions: currentState.availableActions,
-        visibleSections: currentState.visibleSections,
-        extractedData: this.stateManager.getAllExtractedData(),
-        checkpoints: this.stateManager.getCheckpointNames()
-      };
-
-      // Use domain planning service for replanning
-      const planningContext: PlanningContext = {
-        goal: this.currentGoal,
-        url: stateContext.currentUrl,
-        existingPageState: (currentState as any).pageContent,
-        previousAttempts: []
-      };
-      
-      if (this.workflow) {
-        planningContext.workflowId = this.workflow.getId();
-      }
-
-      const planResult = await this.planningService.createPlan(this.currentGoal, planningContext);
-      if (planResult.isSuccess()) {
-        const plan = planResult.getValue();
-        return plan;
-      } else {
-        this.reporter.log(`❌ Failed to replan with domain service: ${planResult.getError()}`);
-      }
-    } catch (error) {
-      this.reporter.log(`❌ Failed to replan with state context: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-    
-    return null;
-  }
-
-  private async buildWorkflowResult(): Promise<WorkflowResult> {
-    const endTime = new Date();
-    const duration = this.startTime ? endTime.getTime() - this.startTime.getTime() : 0;
-    
-    let completionPercentage = 0;
-    let workflowStatus: WorkflowResult['status'] = 'failure';
-    let workflowId = `workflow-${Date.now()}`;
-    let workflowGoal = '';
-    let executionStats: ExecutionStatistics = {
-      totalExecutions: 0,
-      successfulExecutions: 0,
-      failedExecutions: 0,
-      retryExecutions: 0,
-      evidenceCount: 0
-    };
-    
-    if (this.workflowAggregate && this.executionAggregate) {
-      // Use aggregate data
-      const workflow = this.workflowAggregate.getWorkflow();
-      const executionStatus = this.workflowAggregate.getExecutionStatus();
-      const executionStatistics = this.executionAggregate.getExecutionStatistics();
-      
-      workflowId = workflow.getId().toString();
-      workflowGoal = workflow.goal;
-      completionPercentage = executionStatus.completionPercentage;
-      executionStats = executionStatistics;
-      
-      // Determine status from workflow aggregate
-      if (workflow.isComplete()) {
-        workflowStatus = 'success';
-      } else if (workflow.isFailed()) {
-        workflowStatus = 'failure';
-      } else if (completionPercentage >= 70) {
-        workflowStatus = 'partial';
-      } else if (completionPercentage >= 40) {
-        workflowStatus = 'degraded';
-      }
-      
-      this.reporter.log(`📊 Execution statistics: ${JSON.stringify(executionStats)}`);
-      
-    } else if (this.workflow && this.currentPlan) {
-      // Fallback to entity data
-      workflowId = this.workflow.getId().toString();
-      workflowGoal = this.workflow.goal;
-      completionPercentage = this.currentPlan.getProgress() * 100;
-      
-      // Determine status from workflow entity
-      if (this.workflow.isComplete()) {
-        workflowStatus = 'success';
-      } else if (this.workflow.isFailed()) {
-        workflowStatus = 'failure';
-      } else if (completionPercentage >= 70) {
-        workflowStatus = 'partial';
-      } else if (completionPercentage >= 40) {
-        workflowStatus = 'degraded';
-      }
-    } else {
-      const totalSteps = this.currentPlan?.getSteps().length || 0;
-      const completedCount = Array.from(this.completedSteps.values())
-        .filter(r => r.success || r.status === 'partial').length;
-      completionPercentage = totalSteps > 0 ? (completedCount / totalSteps) * 100 : 0;
-      
-      if (completionPercentage === 100) {
-        workflowStatus = 'success';
-      } else if (completionPercentage >= 70) {
-        workflowStatus = 'partial';
-      } else if (completionPercentage >= 40) {
-        workflowStatus = 'degraded';
-      }
-      
-      workflowGoal = this.currentGoal || '';
-    }
-    
-    // Get all accumulated data
-    const allExtractedData = this.stateManager.getAllExtractedData();
-    
-    // Base result object with aggregate data
-    const baseResult: WorkflowResult = {
-      id: workflowId,
-      goal: workflowGoal,
-      status: workflowStatus,
-      completedTasks: Array.from(this.completedSteps.keys()),
-      completedSteps: [], // TODO: Collect actual Task entities that were completed
-      failedTasks: Array.from(this.completedSteps.values()).filter(r => !r.success).map(r => r.stepId),
-
-      extractedData: allExtractedData,
+      id: this.workflow?.getId().toString() || '',
+      goal: this.workflow?.goal || '',
+      status,
+      completedTasks: [], // Would be populated from completed task IDs
+      completedSteps: [], // Would be populated from completed steps
+      failedTasks: [], // Would be populated from failed tasks
+      extractedData,
       summary: `Workflow completed with ${completionPercentage.toFixed(1)}% progress`,
-
       startTime: this.startTime || new Date(),
-      endTime: endTime,
-      duration,
-    };
-    
-    if (this.summarizer) {
-      try {
-        const summarizerInput: SummarizerInput = {
-          goal: this.currentGoal || '',
-          plan: this.currentPlan?.getSteps().map(step => ({
-            id: step.getId().toString(),
-            step: step.getOrder(),
-            description: step.getDescription(),
-            expectedOutcome: step.getDescription()
-          })) || [],
-          completedSteps: Array.from(this.completedSteps.values()),
-          extractedData: allExtractedData,
-          totalDuration: duration,
-          startTime: this.startTime || new Date(),
-          endTime: endTime,
-          errors: this.errors,
-          url: this.browser.getPage().url()
-        };
-        
-        const structuredSummary = await this.summarizer.execute(summarizerInput);
-        
-        return {
-          ...baseResult,
-          summary: structuredSummary.summary
-        };
-      } catch (error) {
-        this.reporter.log(`⚠️ Summarizer failed, using basic result: ${error}`);
-        return baseResult;
-      }
-    }
-    
-    return baseResult;
-  }
-
-  private calculateCompletionPercentage(): number {
-    const totalSteps = this.currentPlan?.getSteps().length || 0;
-    const completedCount = Array.from(this.completedSteps.values())
-      .filter(r => r.success || r.status === 'partial').length;
-    return totalSteps > 0 ? (completedCount / totalSteps) * 100 : 0;
-  }
-
-  private emitWorkflowEvent(event: keyof import('../interfaces/event-bus.interface').AppEvents, data: any): void {
-    this.eventBus.emit(event, data);
-  }
-
-  private async publishEntityEvents(): Promise<void> {
-    const allEvents: DomainEvent[] = [];
-
-    // Collect events from workflow
-    if (this.workflow) {
-      allEvents.push(...this.workflow.getDomainEvents());
-      this.workflow.clearDomainEvents();
-    }
-
-    // Collect events from current plan
-    if (this.currentPlan) {
-      allEvents.push(...this.currentPlan.getDomainEvents());
-      this.currentPlan.clearDomainEvents();
-
-      // Collect events from all steps and tasks
-      const steps = this.currentPlan.getSteps();
-      for (const step of steps) {
-        allEvents.push(...step.getDomainEvents());
-        step.clearDomainEvents();
-
-        const tasks = step.getTasks();
-        for (const task of tasks) {
-          allEvents.push(...task.getDomainEvents());
-          task.clearDomainEvents();
-        }
-      }
-    }
-
-    // Collect events from workflow and execution aggregates
-    if (this.workflowAggregate) {
-      allEvents.push(...this.workflowAggregate.getDomainEvents());
-      this.workflowAggregate.clearDomainEvents();
-    }
-
-    if (this.executionAggregate) {
-      allEvents.push(...this.executionAggregate.getDomainEvents());
-      this.executionAggregate.clearDomainEvents();
-    }
-
-    // Publish and store all events
-    if (allEvents.length > 0) {
-      // Store events in event store for persistence and replay
-      await this.eventStore.storeMany(allEvents, { 
-        workflowId: this.workflow?.getId()?.toString(),
-        publishedAt: new Date().toISOString()
-      });
-      
-      // Publish events to handlers
-      await this.workflowEventBus.publishDomainEvents(allEvents);
-      this.reporter.log(`📡 Published and stored ${allEvents.length} domain events`);
-    }
-  }
-
-  async cleanup(): Promise<void> {
-    if (this.browser) {
-      await this.browser.close();
-      this.reporter.log('🛑 Browser closed');
-    }
-  }
-
-  private buildEvaluationContext(): EvaluationContext {
-    const currentUrlObj = Url.create(this.browser.getPageUrl()).getValue();
-    
-    return {
-      originalGoal: this.currentGoal,
-      currentUrl: currentUrlObj
+      endTime: new Date(),
+      duration: this.getDuration()
     };
   }
 
-  private async createPlan(goal: string, currentUrl: string): Promise<Result<Plan>> {
-    try {
-      const currentState = await this.captureSemanticState();
-      
-      const planningContext: PlanningContext = {
-        goal,
-        url: currentUrl,
-        existingPageState: (currentState as any).pageContent,
-        previousAttempts: [], // Could be populated from memory service
-      };
-      
-      if (this.workflow) {
-        planningContext.workflowId = this.workflow.getId();
-      }
+  /**
+   * Setup event listeners
+   */
+  private setupEventListeners(): void {
+    this.eventCoordinator.setupWorkflowListeners({
+      onStepComplete: (step) => this.handleStepComplete(step),
+      onError: (error) => this.handleError(error)
+    });
+    
+    this.eventCoordinator.setupStateChangeListeners(
+      (state) => this.handleStateChange(state)
+    );
+  }
 
-      const planResult = await this.planningService.createPlan(goal, planningContext);
-      if (planResult.isFailure()) {
-        this.reporter.log(`❌ Domain planning failed: ${planResult.getError()}`);
-        return planResult;
-      }
+  /**
+   * Handle step completion
+   */
+  private handleStepComplete(step: any): void {
+    // Could trigger intermediate actions or logging
+    console.log(`Step completed: ${step.stepId}`);
+  }
 
-      const plan = planResult.getValue();
-      this.reporter.log(`✅ Domain service created plan with ${plan.getSteps().length} steps`);
-      
-      return Result.ok(plan);
-    } catch (error) {
-      return Result.fail(`Domain planning error: ${error instanceof Error ? error.message : String(error)}`);
+  /**
+   * Handle errors
+   */
+  private handleError(error: any): void {
+    console.error(`Workflow error: ${error.message}`);
+  }
+
+  /**
+   * Handle state changes
+   */
+  private handleStateChange(state: any): void {
+    // Could trigger replanning or other responses
+    if (state.unexpected) {
+      console.warn('Unexpected state change detected');
     }
   }
 
   /**
-   * Setup StateManager event listeners for monitoring integration
+   * Check if workflow should replan
    */
-  private setupStateManagerEventListeners(): void {
-    this.stateManager.on('state:captured', (data: any) => {
-      this.reporter.log(`📸 State captured: ${data.url} (Sections: ${data.sectionsCount}, Actions: ${data.actionsCount})`);
-      this.eventBus.emit('state:captured', data);
-    });
-
-    this.stateManager.on('checkpoint:created', (data: any) => {
-      this.reporter.log(`💾 Checkpoint created: ${data.name} (Total: ${data.checkpointCount})`);
-      this.eventBus.emit('state:checkpoint', data);
-    });
-
-    this.stateManager.on('data:extracted', (data: any) => {
-      this.reporter.log(`📊 Data extracted: ${data.keys.join(', ')} (${data.itemCount} items)`);
-      this.eventBus.emit('state:data-extracted', data);
-    });
-  }
-  
-  /**
-   * Process extracted data from evidence objects and store in StateManager
-   */
-  private async processExtractedDataFromEvidence(evidence: Evidence[]): Promise<void> {
-    if (!evidence || evidence.length === 0) {
-      return;
-    }
-
-    try {
-      for (const evidenceItem of evidence) {
-        const evidenceData = evidenceItem.getData();
-        
-        // Check if this is extracted data evidence
-        if (evidenceItem.getType() === 'extracted-data' && evidenceData) {
-          let extractedData: Record<string, any> = {};
-          
-          // Parse the evidence data if it's a JSON string
-          if (typeof evidenceData === 'string') {
-            try {
-              extractedData = JSON.parse(evidenceData);
-            } catch (parseError) {
-              console.warn('Failed to parse extracted data evidence:', parseError);
-              continue;
-            }
-          } else if (typeof evidenceData === 'object') {
-            extractedData = evidenceData;
-          }
-          
-          // Store extracted data in StateManager
-          if (Object.keys(extractedData).length > 0) {
-            this.stateManager.mergeExtractedData(extractedData);
-            this.reporter.log(`📊 Processed extracted data from evidence: ${Object.keys(extractedData).join(', ')}`);
-          }
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to process extracted data from evidence:', error);
-    }
+  private shouldReplan(error: string): boolean {
+    const replanPatterns = [
+      'element not found',
+      'timeout',
+      'unexpected state',
+      'navigation failed'
+    ];
+    
+    return replanPatterns.some(pattern => 
+      error.toLowerCase().includes(pattern)
+    );
   }
 
   /**
-   * Connect domain events to WorkflowMonitor through EventBus bridge
+   * Check if minimum completion threshold is met
    */
-  private connectDomainEventsToMonitor(): void {
-    if (this.workflow) {
-      // Note: In a full implementation, these would be set up when domain events are emitted
-      // For now, we'll set up the basic infrastructure for bridging domain events to the event bus
-      
-      // This is a placeholder that demonstrates how domain events would be bridged
-      // In a full implementation, the workflow entities would emit domain events
-      // and we would listen to them here to bridge them to the system event bus
-      this.reporter.log('🔗 Domain event monitoring bridge configured');
-      
-      // Example of how domain events would be bridged:
-      // this.workflowEventBus.on('WorkflowStartedEvent', (event: WorkflowStartedEvent) => {
-      //   this.eventBus.emit('workflow:started', {
-      //     goal: event.goal,
-      //     workflowId: event.workflowId.toString(),
-      //     timestamp: event.occurredAt
-      //   });
-      // });
-      
-      // this.workflowEventBus.on('TaskCompletedEvent', (event: TaskCompletedEvent) => {
-      //   this.eventBus.emit('task:completed', {
-      //     taskId: event.taskId.toString(),
-      //     result: event.result,
-      //     timestamp: event.occurredAt
-      //   });
-      // });
-    }
+  private hasMinimumCompletion(): boolean {
+    const progress = this.orchestrator.getProgress();
+    const completionPercentage = (progress.completed / progress.total) * 100;
+    return completionPercentage >= (this.config.minAcceptableCompletion || 60);
+  }
+
+  /**
+   * Handle workflow error
+   */
+  private handleWorkflowError(error: Error): void {
+    this.eventCoordinator.emitEvent('workflow:failed', {
+      workflowId: this.workflow?.getId(),
+      error: error.message,
+      duration: this.getDuration()
+    });
+  }
+
+  /**
+   * Get execution duration
+   */
+  private getDuration(): number {
+    if (!this.startTime) return 0;
+    return Date.now() - this.startTime.getTime();
+  }
+
+  /**
+   * Cleanup resources
+   */
+  private async cleanup(): Promise<void> {
+    this.orchestrator.reset();
+    this.stateCoordinator.reset();
+    this.eventCoordinator.cleanup();
+    
+    this.executionAggregate = null;
+    this.workflow = null;
+    this.currentPlan = null;
+    this.startTime = null;
   }
 }

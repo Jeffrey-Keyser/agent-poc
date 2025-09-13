@@ -74,7 +74,8 @@ export class BrowserExecutionService implements ExecutionService {
           
           // Stop on failure
           if (!result.success) {
-            console.log(`❌ Micro-action failed: ${action.getDescription()}`);
+            console.error(`[BrowserExecutionService] Micro-action failed: ${action.getDescription()}`);
+            console.error(`[BrowserExecutionService] Error details: ${result.error}`);
             break;
           }
           

@@ -50,6 +50,19 @@ export {
   VisionAnalysisService
 } from './evaluation-service';
 
+export { WorkflowOrchestrator } from './workflow-orchestrator';
+export { WorkflowPlanningService } from './workflow-planning-service';
+export { 
+  WorkflowEventCoordinator,
+  EventCoordinatorConfig,
+  EventMetrics,
+  WorkflowEventCallbacks 
+} from './workflow-event-coordinator';
+export { 
+  WorkflowStateCoordinator,
+  StateContext 
+} from './workflow-state-coordinator';
+
 export { Result } from '../entities/result';
 export { 
   WorkflowId, 

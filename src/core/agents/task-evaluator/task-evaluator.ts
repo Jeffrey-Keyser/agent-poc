@@ -4,6 +4,8 @@ import { EvaluatorConfig } from '../../types/agent-types';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { JsonOutputParser } from '@langchain/core/output_parsers';
 import { TASK_EVALUATOR_PROMPT } from './task-evaluator.prompt';
+import { DomService } from '@/infra/services/dom-service';
+import { PageState } from '../../types';
 
 /**
  * TaskEvaluatorAgent - Evaluates strategic task completion success
@@ -23,10 +25,13 @@ import { TASK_EVALUATOR_PROMPT } from './task-evaluator.prompt';
 export class TaskEvaluatorAgent implements ITaskEvaluator {
   public readonly name = 'TaskEvaluator';
   public readonly maxRetries: number;
+
+  private domService: DomService;
   private llm: LLM;
 
   constructor(llm: LLM, config: EvaluatorConfig) {
     this.llm = llm;
+    this.domService = config.domService;
     this.maxRetries = config.maxRetries || 3;
   }
 
@@ -38,6 +43,14 @@ export class TaskEvaluatorAgent implements ITaskEvaluator {
       throw new Error('Invalid evaluator input provided');
     }
 
+    // FUTURE: This class should not be responsible for collecting screenshots
+    // But for now, we will inject the domService to get the screenshots
+    const { screenshot, pristineScreenshot } = await this.domService.getInteractiveElements();
+    input.screenshots = {
+      before: screenshot,
+      after: pristineScreenshot
+    };
+    
     const systemMessage = new SystemMessage({ content: TASK_EVALUATOR_PROMPT });
     
     const userPrompt = this.buildEvaluationPrompt(input);
@@ -72,9 +85,7 @@ export class TaskEvaluatorAgent implements ITaskEvaluator {
       confidence: number;
       evidence: string;
       reason: string;
-      suggestions?: string[];
-      partialSuccess?: boolean;
-      achievedAlternative?: string;
+      suggestions: string[];
     }>();
 
     const evaluation = await this.llm.invokeAndParse(messages, parser);
@@ -82,20 +93,11 @@ export class TaskEvaluatorAgent implements ITaskEvaluator {
     const output: EvaluatorOutput = {
       stepId: input.step.getId().toString(),
       success: evaluation.success,
-      confidence: this.validateConfidence(evaluation.confidence),
+      confidence: evaluation.confidence,
       evidence: evaluation.evidence || 'No evidence provided',
       reason: evaluation.reason || 'No reason provided',
       suggestions: evaluation.suggestions || []
     };
-
-    // NEW: Add optional fields only if they have values
-    if (evaluation.partialSuccess !== undefined) {
-      output.partialSuccess = evaluation.partialSuccess;
-    }
-    if (evaluation.achievedAlternative !== undefined) {
-      output.achievedAlternative = evaluation.achievedAlternative;
-    }
-
 
     if (!this.validateOutput(output)) {
       throw new Error('Generated invalid evaluator output');
@@ -151,16 +153,12 @@ IMPORTANT: This is an EXTRACTION task. Success is determined by:
 Extracted Data Present: ${afterState.extractedData && Object.keys(afterState.extractedData).length > 0 ? 'YES' : 'NO'}
 ` : '';
 
-    // NEW: Flexible evaluation criteria
-    const flexibleCriteria = this.buildFlexibleCriteria(step);
-
     return `
 STRATEGIC TASK EVALUATION:
 
 TASK DETAILS:
 - Description: ${step.getDescription()}
 - Expected Outcome: ${step.getDescription()} completion
-${flexibleCriteria}
 ${extractionGuidance}
 EXECUTION RESULTS:
 ${microActionsText}
@@ -180,35 +178,7 @@ Your response must be valid JSON in the specified format.
     `;
   }
 
-  private buildFlexibleCriteria(step: any): string {
-    let criteria = '';
-
-    if (step.acceptableOutcomes?.length > 0) {
-      criteria += `\nACCEPTABLE ALTERNATIVES:
-${step.acceptableOutcomes.map((outcome: string) => `- ${outcome}`).join('\n')}`;
-    }
-
-    if (step.requiredEvidence?.length > 0) {
-      criteria += `\nREQUIRED EVIDENCE (must be present for success):
-${step.requiredEvidence.map((evidence: string) => `- ${evidence}`).join('\n')}`;
-    }
-
-    if (step.optionalEvidence?.length > 0) {
-      criteria += `\nOPTIONAL EVIDENCE (nice to have):
-${step.optionalEvidence.map((evidence: string) => `- ${evidence}`).join('\n')}`;
-    }
-
-    if (step.allowPartialSuccess) {
-      const minConfidence = step.minSuccessConfidence || 0.5;
-      criteria += `\nPARTIAL SUCCESS ALLOWED:
-- Minimum confidence threshold: ${minConfidence}
-- Can succeed with partial completion if confidence >= ${minConfidence}`;
-    }
-
-    return criteria;
-  }
-
-  private buildStateComparison(beforeState: any, afterState: any): string {
+  private buildStateComparison(beforeState: PageState, afterState: PageState): string {
     const changes = [];
 
     // URL comparison
@@ -264,13 +234,5 @@ ${step.optionalEvidence.map((evidence: string) => `- ${evidence}`).join('\n')}`;
     const successCount = results.filter(r => r.success).length;
     const percentage = Math.round((successCount / results.length) * 100);
     return `${percentage}%`;
-  }
-
-  private validateConfidence(confidence: number): number {
-    // Ensure confidence is between 0 and 1
-    if (typeof confidence !== 'number' || isNaN(confidence)) {
-      return 0.5; // Default to moderate confidence
-    }
-    return Math.max(0, Math.min(1, confidence));
   }
 }

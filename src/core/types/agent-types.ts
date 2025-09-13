@@ -29,8 +29,8 @@ export interface PageState {
   availableActions: string[]; // What user can do
   extractedData?: any;
   elements?: DOMElement[]; // Available interactive elements
-  screenshot?: string;        // URL to screenshot with highlights
-  pristineScreenshot?: string; // URL to clean screenshot
+  screenshot: string;
+  pristineScreenshot: string;
   pixelAbove?: number;        // Pixels of content above viewport
   pixelBelow?: number;        // Pixels of content below viewport
 }
@@ -66,6 +66,7 @@ export interface ExecutorConfig {
 
 export interface EvaluatorConfig {
   llm: LLM;
+  domService: DomService;
   maxRetries?: number;
 }
 

@@ -7,8 +7,6 @@ export interface EvaluationResult {
   confidence: Confidence;
   reasoning: string;
   evidence: Evidence[];
-  suggestedImprovements: string[];
-  nextSteps?: string[];
   dataExtracted: ExtractedData | undefined;
 }
 
@@ -241,54 +239,18 @@ export class AIEvaluationService implements EvaluationService {
         return Result.fail('No evidence provided for task evaluation');
       }
 
-      // Analyze evidence quality
-      const evidenceQuality = this.calculateEvidenceQuality(evidence);
-      if (evidenceQuality < 0.5) {
-        return Result.ok({
-          success: false,
-          confidence: Confidence.create(30).getValue(),
-          reasoning: 'Insufficient or poor quality evidence for reliable evaluation',
-          evidence: evidence,
-          suggestedImprovements: [
-            'Collect more comprehensive evidence',
-            'Improve screenshot quality',
-            'Capture multiple verification points'
-          ],
-          nextSteps: ['Retry with better evidence collection'],
-          dataExtracted: undefined
-        });
-      }
-
-      // Use LLM to analyze task completion
       const analysisResult = await this.analyzeTaskWithLLM(task, evidence, context);
       if (analysisResult.isFailure()) {
         return Result.fail(`LLM analysis failed: ${analysisResult.getError()}`);
       }
 
       const analysis = analysisResult.getValue();
-
-      // Enhanced confidence calculation
-      const baseConfidence = analysis.confidence.getValue();
-      const evidenceBonus = Math.min(20, evidence.length * 5); // Up to 20 points for evidence
-      const finalConfidence = Math.min(100, baseConfidence + evidenceBonus);
-
-      // Extract structured data if applicable
-      let extractedData: ExtractedData | undefined;
-      if (this.taskInvolvesDataExtraction(task)) {
-        const extractionResult = await this.attemptDataExtraction(evidence, context);
-        if (extractionResult.isSuccess()) {
-          extractedData = extractionResult.getValue();
-        }
-      }
-
       const result: EvaluationResult = {
         success: analysis.success,
-        confidence: Confidence.create(finalConfidence).getValue(),
+        confidence: analysis.confidence,
         reasoning: analysis.reasoning,
-        evidence: evidence,
-        suggestedImprovements: analysis.suggestedImprovements,
-        nextSteps: analysis.nextSteps,
-        dataExtracted: extractedData || undefined
+        evidence,
+        dataExtracted: undefined
       };
 
       return Result.ok(result);
@@ -514,16 +476,6 @@ export class AIEvaluationService implements EvaluationService {
     }
   }
 
-  // Private helper methods
-  private calculateEvidenceQuality(evidence: Evidence[]): number {
-    if (evidence.length === 0) return 0;
-
-    const avgConfidence = evidence.reduce((sum, e) => sum + (e.getConfidence() || 0), 0) / evidence.length;
-    const diversityBonus = Math.min(0.2, evidence.length * 0.05); // Bonus for multiple evidence types
-    
-    return Math.min(1.0, (avgConfidence / 100) + diversityBonus);
-  }
-
   private async analyzeTaskWithLLM(
     _task: Task,
     evidence: Evidence[],
@@ -553,32 +505,6 @@ export class AIEvaluationService implements EvaluationService {
       suggestedImprovements,
       nextSteps
     });
-  }
-
-  private taskInvolvesDataExtraction(task: Task): boolean {
-    const description = task.getDescription().toLowerCase();
-    return description.includes('extract') || 
-           description.includes('scrape') || 
-           description.includes('collect') ||
-           description.includes('gather');
-  }
-
-  private async attemptDataExtraction(
-    evidence: Evidence[],
-    context: EvaluationContext
-  ): Promise<Result<ExtractedData>> {
-    const textContent = this.extractTextFromEvidence(evidence);
-    
-    const extractedData: ExtractedData = {
-      schema: ExtractionSchema.simple('content-extraction', [{ name: 'content', type: 'string' }]).getValue(),
-      data: { content: textContent },
-      confidence: Confidence.create(70).getValue(),
-      source: context.currentUrl,
-      extractedAt: new Date(),
-      validationErrors: []
-    };
-
-    return Result.ok(extractedData);
   }
 
   private async createTaskEvaluation(

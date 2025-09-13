@@ -19,6 +19,7 @@ import { Evidence, Confidence, ExtractionSchema, TaskId, Intent, Priority } from
 import { LLM } from '../../core/interfaces/llm.interface';
 import { TaskEvaluatorAgent } from '../../core/agents/task-evaluator/task-evaluator';
 import { EvaluatorConfig } from '../../core/types/agent-types';
+import { EvaluatorInput, EvaluatorOutput, PageState } from '@/core/types';
 
 /**
  * Infrastructure implementation of EvaluationService that bridges to the existing TaskEvaluatorAgent
@@ -44,21 +45,14 @@ export class AIEvaluationService implements EvaluationService {
         return Result.fail('No evidence provided for task evaluation');
       }
 
-      // Convert to format expected by TaskEvaluatorAgent
       const evaluatorInput = this.convertToEvaluatorInput(task, evidence, context);
-      
-      // Use existing TaskEvaluatorAgent
       const evaluatorOutput = await this.taskEvaluatorAgent.execute(evaluatorInput);
-      
       if (!evaluatorOutput) {
         return Result.fail(`Evaluation failed: No output returned`);
       }
 
-      // Convert agent output to domain result
-      const result = this.convertEvaluatorOutputToResult(evaluatorOutput, evidence, context);
-      
+      const result = this.convertEvaluatorOutputToResult(evaluatorOutput, evidence);
       return Result.ok(result);
-
     } catch (error) {
       return Result.fail(`Task evaluation error: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -67,7 +61,6 @@ export class AIEvaluationService implements EvaluationService {
   async evaluateStepSuccess(
     step: Step,
     taskResults: TaskResult[],
-    context: EvaluationContext
   ): Promise<Result<StepEvaluation>> {
     try {
       if (taskResults.length === 0) {
@@ -91,8 +84,7 @@ export class AIEvaluationService implements EvaluationService {
           continue; // Skip if task not found
         }
 
-        // Create task evaluation
-        const taskEvaluation = await this.createTaskEvaluation(task, taskResult, context);
+        const taskEvaluation = await this.createTaskEvaluation(task, taskResult);
         taskEvaluations.push(taskEvaluation);
 
         if (!taskEvaluation.success) {
@@ -177,14 +169,18 @@ export class AIEvaluationService implements EvaluationService {
       }
       const analysisTask = analysisTaskResult.getValue();
 
-      const currentPageState = {
+      const currentPageState: PageState = {
         url: context.currentUrl.toString(),
         title: 'Screenshot Analysis',
         visibleSections: [],
-        availableActions: []
+        availableActions: [],
+        screenshot: screenshotUrl,
+        pristineScreenshot: screenshotUrl,
+        pixelAbove: 0,
+        pixelBelow: 0
       };
 
-      const evaluatorInput = {
+      const evaluatorInput: EvaluatorInput = {
         step: analysisTask,
         beforeState: currentPageState,
         afterState: currentPageState,
@@ -300,78 +296,48 @@ export class AIEvaluationService implements EvaluationService {
     }
   }
 
-  // Private helper methods
-  private convertToEvaluatorInput(task: Task, evidence: Evidence[], context: EvaluationContext): any {
-    // Create the strategic task representation
-    const strategicTask = {
-      id: task.getId().toString(),
-      name: 'Task Evaluation',
-      description: task.getDescription(),
-      intent: (task.getIntent()?.toString() || 'verify') as 'search' | 'filter' | 'navigate' | 'extract' | 'authenticate' | 'verify' | 'interact',
-      targetConcept: this.extractTargetConcept(task.getDescription()),
-      expectedOutcome: `Task should complete: ${task.getDescription()}`,
-      dependencies: [],
-      maxAttempts: 1,
-      priority: 1 // Default priority since Priority.getValue() may not exist
-    };
-
-    // Create PageState objects for before/after
+  private convertToEvaluatorInput(task: Task, evidence: Evidence[], context: EvaluationContext): EvaluatorInput {
     const currentPageState = {
       url: context.currentUrl.toString(),
       title: 'Current Page',
       visibleSections: [],
-      availableActions: []
-    };
+      availableActions: [],
+      screenshot: this.findScreenshotInEvidence(evidence, 'before') || '',
+      pristineScreenshot: this.findScreenshotInEvidence(evidence, 'before') || '',
+      pixelAbove: 0,
+      pixelBelow: 0
+    } as PageState;
 
-    // Return structure matching EvaluatorInput interface
     return {
-      step: strategicTask,
+      step: task,
       beforeState: currentPageState,
       afterState: currentPageState,
       microActions: [],
       results: [],
       screenshots: {
-        before: this.findScreenshotInEvidence(evidence, 'before'),
-        after: this.findScreenshotInEvidence(evidence, 'after')
+        before: this.findScreenshotInEvidence(evidence, 'before') || '',
+        after: this.findScreenshotInEvidence(evidence, 'after') || ''
       }
     };
   }
 
   private convertEvaluatorOutputToResult(
-    evaluatorOutput: any, 
-    evidence: Evidence[], 
-    context: EvaluationContext
+    evaluatorOutput: EvaluatorOutput, 
+    evidence: Evidence[]
   ): EvaluationResult {
-    const success = evaluatorOutput.success && evaluatorOutput.confidence > 50;
-    
-    // Extract structured data if applicable
-    let extractedData: ExtractedData | undefined;
-    if (evaluatorOutput.extractedData) {
-      extractedData = {
-        schema: ExtractionSchema.simple('evaluation-data', [{ name: 'result', type: 'string' }]).getValue(),
-        data: evaluatorOutput.extractedData,
-        confidence: Confidence.create(evaluatorOutput.confidence || 70).getValue(),
-        source: context.currentUrl,
-        extractedAt: new Date(),
-        validationErrors: []
-      };
-    }
 
     return {
-      success,
-      confidence: Confidence.create(evaluatorOutput.confidence || 50).getValue(),
-      reasoning: evaluatorOutput.reasoning || 'No reasoning provided',
+      success: evaluatorOutput.success,
+      confidence: Confidence.create(evaluatorOutput.confidence).getValue(),
+      reasoning: evaluatorOutput.reason || 'No reasoning provided',
       evidence: evidence,
-      suggestedImprovements: evaluatorOutput.suggestedImprovements || [],
-      nextSteps: evaluatorOutput.nextSteps || [],
-      dataExtracted: extractedData
+      dataExtracted: undefined
     };
   }
 
   private async createTaskEvaluation(
     task: Task,
-    result: TaskResult,
-    _context: EvaluationContext
+    result: TaskResult
   ): Promise<TaskEvaluation> {
     const performance: TaskPerformance = {
       executionTime: result.duration || 0,
@@ -529,16 +495,6 @@ export class AIEvaluationService implements EvaluationService {
     };
 
     return result;
-  }
-
-  private extractTargetConcept(description: string): string {
-    // Simple heuristic to extract target concept from description
-    const words = description.toLowerCase().split(' ');
-    const concepts = words.filter(word => 
-      word.length > 3 && 
-      !['the', 'and', 'with', 'from', 'that', 'this', 'will'].includes(word)
-    );
-    return concepts[0] || 'element';
   }
 
   private findScreenshotInEvidence(evidence: Evidence[], type?: string): string | undefined {

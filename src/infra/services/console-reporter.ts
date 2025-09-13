@@ -6,19 +6,19 @@ export class ConsoleReporter implements AgentReporter {
   getSpinner() {}
 
   success(message: string): void {
-    console.log(`[${this.name}] ✅ ${message}`);
+    console.log(`[${this.name}] [SUCCESS] ${message}`);
   }
 
   failure(message: string): void {
-    console.log(`[${this.name}] ❌ ${message}`);
+    console.log(`[${this.name}] [FAILED] ${message}`);
   }
 
   loading(message: string): void {
-    console.log(`[${this.name}] 💡 ${message}`);
+    console.log(`[${this.name}] [LOADING] ${message}`);
   }
 
   info(message: string): void {
-    console.log(`[${this.name}] 💡 ${message}`);
+    console.log(`[${this.name}] [INFO] ${message}`);
   }
 
   log(message: string): void {

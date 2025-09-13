@@ -1,29 +1,10 @@
-import { LLM } from '../interfaces/llm.interface';
 import { Browser } from '../interfaces/browser.interface';
 import { AgentReporter } from '../interfaces/agent-reporter.interface';
 import { EnhancedEventBusInterface } from '../interfaces/event-bus.interface';
-import { ITaskSummarizer } from '../interfaces/agent.interface';
 import { WorkflowManager } from '../services/workflow-manager';
 import { DomService } from '@/infra/services/dom-service';
-import { TaskSummarizerAgent } from '../agents/task-summarizer';
-import { MicroActionExecutor } from '../../infrastructure/services/micro-action-executor';
-import { VariableManager } from '../services/variable-manager';
-import { 
-  BrowserExecutionService, 
-  AIEvaluationService,
-  EvaluationService
-} from '../../infrastructure/services';
-import {
-  WorkflowRepository,
-  PlanRepository,
-  MemoryRepository
-} from '../repositories';
-import {
-  InMemoryWorkflowRepository,
-  InMemoryPlanRepository,
-  InMemoryMemoryRepository
-} from '../../infrastructure/repositories';
-import { ExecutionService } from '../domain-services/execution-service';
+import { Variable } from '../value-objects';
+import { WorkflowManagerBuilder } from './workflow-manager-builder';
 import { InitMultiAgentConfig } from '@/init-multi-agent';
 
 /**
@@ -37,27 +18,10 @@ interface Infrastructure {
 }
 
 /**
- * Domain services bundle
- */
-interface Services {
-  executionService: ExecutionService;
-  evaluationService: EvaluationService;
-}
-
-/**
- * Repositories bundle
- */
-interface Repositories {
-  workflowRepository: WorkflowRepository;
-  planRepository: PlanRepository;
-  memoryRepository: MemoryRepository;
-}
-
-/**
- * Simplified factory for creating WorkflowManager instances with all required dependencies
+ * Simplified factory for creating WorkflowManager instances using the new builder pattern
  * 
- * This factory replaces the complex AgentFactory pattern with a single, clean entry point
- * that ensures all services and repositories are properly configured and injected.
+ * This factory replaces the complex constructor with the WorkflowManagerBuilder pattern
+ * that ensures all services are properly configured and injected.
  */
 export class WorkflowFactory {
   
@@ -71,92 +35,23 @@ export class WorkflowFactory {
     config: InitMultiAgentConfig, 
     infrastructure: Infrastructure
   ): WorkflowManager {
-    const variableManager = new VariableManager(config.variables || []);
-    const microActionExecutor = new MicroActionExecutor(
-      infrastructure.browser,
-      infrastructure.domService,
-      variableManager
+    // Convert config variables to Variable value objects
+    const variables: Variable[] = (config.variables || []).map(variable => 
+      typeof variable === 'string' 
+        ? new Variable({ name: variable, value: '', isSecret: false })
+        : variable
     );
     
-    const services = this.createDomainServices(infrastructure, config, microActionExecutor);
-    const repositories = this.createRepositories(config);
-    
-    return new WorkflowManager(
-      config.llm,
-      services.executionService,
-      services.evaluationService,
-      repositories.workflowRepository,
-      repositories.planRepository,
-      repositories.memoryRepository,
-      infrastructure.eventBus,
-      infrastructure.browser,
-      infrastructure.domService,
-      microActionExecutor,
-      infrastructure.reporter,
-      this.createSummarizer(config.llm, config),
-      {
-        maxRetries: config.maxRetries || 3,
-        timeout: config.timeout || 300000
-      }
-    );
-  }
-  
-  /**
-   * Create domain services with consistent configuration
-   */
-  private static createDomainServices(
-    infrastructure: Infrastructure, 
-    config: InitMultiAgentConfig,
-    microActionExecutor: MicroActionExecutor
-  ): Services {
-    const executionService = new BrowserExecutionService(
-      config.llm,
-      infrastructure.browser,
-      infrastructure.domService,
-      microActionExecutor,
-      {
-        llm: config.llm,
-        browser: infrastructure.browser,
-        domService: infrastructure.domService,
-        maxRetries: config.maxRetries || 3
-      }
-    );
-
-    const evaluationService = new AIEvaluationService(
-      config.llm,
-      {
-        llm: config.llm,
-        maxRetries: config.maxRetries || 2
-      }
-    );
-
-    return {
-      executionService,
-      evaluationService
-    };
-  }
-  
-  /**
-   * Create repository implementations
-   * Uses in-memory implementations by default, can be extended for persistent storage
-   */
-  private static createRepositories(_config: InitMultiAgentConfig): Repositories {
-    return {
-      workflowRepository: new InMemoryWorkflowRepository(),
-      planRepository: new InMemoryPlanRepository(),
-      memoryRepository: new InMemoryMemoryRepository()
-    };
-  }
-  
-  /**
-   * Create task summarizer with configuration
-   */
-  private static createSummarizer(llm: LLM, config: InitMultiAgentConfig): ITaskSummarizer {
-    return new TaskSummarizerAgent(llm, {
-      llm,
-      maxRetries: config.maxRetries || 3,
-      includeRecommendations: true,
-      maxSummaryLength: 500
-    });
+    // Use the WorkflowManagerBuilder to construct the WorkflowManager
+    return new WorkflowManagerBuilder()
+      .withLLM(config.llm)
+      .withBrowser(infrastructure.browser)
+      .withEventBus(infrastructure.eventBus)
+      .withReporter(infrastructure.reporter)
+      .withDomService(infrastructure.domService)
+      .withRetryConfig(config.maxRetries || 3, config.timeout || 300000)
+      .withLogging(config.verbose || false)
+      .withVariables(variables)
+      .build();
   }
 }

@@ -27,9 +27,9 @@ export class TaskExecutorAgent implements ITaskExecutor {
   public readonly name = 'TaskExecutor';
   public readonly maxRetries: number;
 
-  private domService: DomService;
   private llm: LLM;
   private browser: Browser;
+  private domService: DomService;
 
   constructor(llm: LLM, browser: Browser, domService: DomService, config: ExecutorConfig) {
     this.llm = llm;
@@ -166,14 +166,19 @@ Use the element indices from the DOM state above.
     return this.parseMicroActions(response.microActions);
   }
 
-
   private async captureCurrentState(): Promise<PageState> {
+    const { screenshot, pristineScreenshot, pixelAbove, pixelBelow } = await this.domService.getInteractiveElements();
+
     return {
       url: this.browser.getPageUrl(),
       title: await this.browser.getPage().title(),
       visibleSections: [],
       availableActions: [],
-      extractedData: {}
+      extractedData: {},
+      screenshot,
+      pristineScreenshot,
+      pixelAbove,
+      pixelBelow
     };
   }
 

@@ -45,6 +45,7 @@ export interface ExecutorOutput {
 }
 
 export interface EvaluatorInput {
+  // TODO: Uhhh should this be different?
   step: Task;
   beforeState: PageState;
   afterState: PageState;
@@ -63,8 +64,6 @@ export interface EvaluatorOutput {
   evidence: string;
   reason: string;
   suggestions: string[];
-  partialSuccess?: boolean;
-  achievedAlternative?: string;
 }
 
 export interface ReplanContext {

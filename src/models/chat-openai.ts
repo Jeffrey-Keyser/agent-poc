@@ -54,6 +54,8 @@ export class ChatOpenAI implements LLM {
       response_format: { type: 'json_object' },
     });
 
+    console.log('response', JSON.stringify(response, null, 2));
+
     return parser.invoke(response);
   }
 }

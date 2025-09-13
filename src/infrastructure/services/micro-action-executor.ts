@@ -93,20 +93,47 @@ export class MicroActionExecutor {
     const elementIndex = action.getElementIndex();
     
     if (elementIndex === undefined) {
-      throw new Error('No element index provided for click action');
+      const error = `No element index provided for click action: ${action.getDescription()}`;
+      console.error(`[MicroActionExecutor] ${error}`);
+      throw new Error(error);
+    }
+
+    // First, ensure we have fresh interactive elements
+    try {
+      await this.domService.getInteractiveElements();
+    } catch (error) {
+      console.error(`[MicroActionExecutor] Failed to get interactive elements: ${error}`);
+      throw new Error(`Failed to get interactive elements for click: ${error}`);
     }
 
     const coordinates = this.domService.getIndexSelector(elementIndex);
     if (!coordinates) {
-      throw new Error(`Index or coordinates not found for element index ${elementIndex}`);
+      const error = `Element with index ${elementIndex} not found on page. Description: ${action.getDescription()}`;
+      console.error(`[MicroActionExecutor] ${error}`);
+      
+      // Log available elements for debugging
+      const { selectorMap } = await this.domService.getInteractiveElements();
+      console.error(`[MicroActionExecutor] Available element indices: ${Object.keys(selectorMap).slice(0, 10).join(', ')}... (total: ${Object.keys(selectorMap).length})`);
+      
+      throw new Error(error);
     }
 
-    await this.domService.resetHighlightElements();
-    await this.domService.highlightElementPointer(coordinates);
-    await this.browser.mouseClick(coordinates.x, coordinates.y);
-    await this.domService.resetHighlightElements();
-    
-    return this.createSuccessResult(action, startTime);
+    try {
+      await this.domService.resetHighlightElements();
+      await this.domService.highlightElementPointer(coordinates);
+      await this.browser.mouseClick(coordinates.x, coordinates.y);
+      await this.domService.resetHighlightElements();
+      
+      // Add a small delay after click to allow page to update
+      await this.wait(500);
+      
+      console.log(`[MicroActionExecutor] Successfully clicked element ${elementIndex} at (${coordinates.x}, ${coordinates.y})`);
+      return this.createSuccessResult(action, startTime);
+    } catch (error) {
+      const errorMsg = `Failed to click element ${elementIndex}: ${error}`;
+      console.error(`[MicroActionExecutor] ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
   }
 
   /**

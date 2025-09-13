@@ -5,6 +5,7 @@ import { PageState } from '../types/agent-types';
 import { LLM } from '../interfaces/llm.interface';
 import { MemoryService } from '../services/memory-service';
 import { TaskPlannerAgent } from '../agents/task-planner';
+import { PlannerInput } from '../types';
 
 export interface StateTransitionAnalysis {
   urlChanged: boolean;
@@ -14,11 +15,9 @@ export interface StateTransitionAnalysis {
   significantChange: boolean;
 }
 
-// Enhanced planning context with state information
 export interface PlanningContext {
   goal: string;
   url: string;
-  existingPageState: string | undefined;
   previousAttempts?: Plan[];
   workflowId?: WorkflowId; // Fix: Add workflowId to link plans to existing workflows
   currentUrl?: string;
@@ -27,7 +26,6 @@ export interface PlanningContext {
   stateHistory?: PageState[];
 }
 
-// Evaluation feedback for refining plans
 export interface EvaluationFeedback {
   stepId: StepId;
   success: boolean;
@@ -37,7 +35,6 @@ export interface EvaluationFeedback {
   evidenceUrl?: string;
 }
 
-// Enhanced result for step decomposition
 export interface StepDecompositionResult {
   tasks: Task[];
   estimatedDuration: number;
@@ -155,27 +152,21 @@ export class AITaskPlanningService implements PlanningService {
         return Result.fail('URL is required for planning');
       }
 
-      // Create planning input compatible with existing TaskPlannerAgent
-      const plannerInput = {
+      const plannerInput: PlannerInput = {
         goal: goal,
         currentUrl: context.url,
         constraints: [],
         currentState: {
           url: context.url,
           title: 'Current Page',
-          html: context.existingPageState || '',
+          screenshot: '',
+          pristineScreenshot: '',
+          pixelAbove: 0,
+          pixelBelow: 0,
           elements: [],
-          loadTime: Date.now(),
           visibleSections: [],
           availableActions: []
-        },
-        variables: [],
-        previousAttempts: context.previousAttempts?.map(plan => ({
-          steps: plan.getSteps().map(step => ({
-            description: step.getDescription(),
-            confidence: step.getConfidence().getValue()
-          }))
-        })) || undefined
+        }
       };
 
       // Use existing TaskPlannerAgent to generate strategic plan

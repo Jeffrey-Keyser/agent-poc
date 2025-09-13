@@ -15,25 +15,14 @@ EVALUATION CRITERIA:
 When evaluating task success, consider:
 
 1. **Primary Outcome**: Was the main expected outcome achieved?
-2. **Acceptable Alternatives**: Are any acceptable alternative outcomes listed? If so, was any achieved?
-3. **Required Evidence**: Check all required evidence items are present
-4. **Partial Success**: If partial success is allowed, evaluate what percentage was completed
+2. **Required Evidence**: Check all required evidence items are present
 
 ### Success Determination Rules:
-- If primary outcome is achieved: SUCCESS (confidence 0.8-1.0)
-- If acceptable alternative is achieved: SUCCESS (confidence 0.6-0.8)  
-- If partial success allowed and >70% complete: PARTIAL SUCCESS (confidence 0.5-0.7)
-- If required evidence is missing: FAILURE
-- If outcome is close but not exact (e.g., "4 stars" instead of "4.5 stars"): Consider context
+- If primary outcome is achieved: SUCCESS (confidence 0.8-1.0). Ensure { "success": true } is returned in the response.
+- If required evidence is missing: FAILURE (confidence 0.0). Ensure { "success": false } is returned in the response.
+- If outcome is close but not exact (e.g., "4 stars" instead of "4.5 stars"): Consider context and use your best judgement.
 
-### Example Flexible Evaluation:
-Task: "Filter results to 4.5+ stars"
-Expected: "Results show only 4.5+ star items"
-Acceptable: ["Results show only 4+ star items", "High-rated items are prioritized"]
-Result: Applied 4-star filter
-Evaluation: SUCCESS with confidence 0.65 (acceptable alternative achieved)
-
-SUCCESS INDICATORS:
+TYPICAL SUCCESS INDICATORS:
 - Expected elements are present on the page
 - URLs match expected patterns
 - Success messages or confirmations appear
@@ -41,7 +30,7 @@ SUCCESS INDICATORS:
 - Page state changed as anticipated
 - User-observable outcomes achieved
 
-SPECIAL RULES FOR EXTRACTION TASKS (intent: 'extract'):
+SPECIAL RULES FOR EXTRACTION TASKS:
 - If the intent is 'extract', success is ONLY determined by whether data was extracted
 - Check if afterState.extractedData contains meaningful data with actual values
 - The extracted data MUST have proper keys and non-empty values:
@@ -76,6 +65,15 @@ CONFIDENCE SCORING:
 - 0.4-0.5: Low confidence (mixed signals)
 - 0.0-0.3: Very uncertain (conflicting evidence)
 
+OUTPUT TYPE:
+{
+  "success": boolean,
+  "confidence": number,
+  "evidence": string,
+  "reason": string,
+  "suggestions": string[]
+}
+
 OUTPUT FORMAT (respond with valid JSON):
 {
   "success": true/false,
@@ -83,8 +81,25 @@ OUTPUT FORMAT (respond with valid JSON):
   "evidence": "Search results page loaded with 'wireless headphones' in URL and product listings visible",
   "reason": "Successfully executed search - URL changed to search results page and relevant products are displayed",
   "suggestions": ["Consider adding price filter validation", "Check for 'no results' scenario"],
-  "partialSuccess": false,
-  "achievedAlternative": "Optional: name of the acceptable alternative that was achieved"
+}
+
+EVALUATION OUTPUT EXAMPLES:
+Example 1 - Successful response:
+{
+  "success": true,
+  "confidence": 0.95,
+  "evidence": "Task completed as expected",
+  "reason": "Primary outcome achieved",
+  "suggestions": []
+}
+
+Example 2 - Failed response:
+{
+  "success": false,
+  "confidence": 0.0,
+  "evidence": "No evidence provided",
+  "reason": "No evidence provided",
+  "suggestions": ["Refresh the page and try again"]
 }
 
 EXTRACTION TASK EXAMPLES:
